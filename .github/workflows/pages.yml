@@ -1,0 +1,103 @@
+# pages.yml
+# Pruebas, instalacion de verdad en Windows y macOS, y publicacion de la pagina e instaladores con
+# py-installer (https://github.com/enderHugin/py-installer).
+name: Probar y publicar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python del sistema con Tk (con fuentes suavizadas) y xvfb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk xvfb fonts-dejavu-core > /dev/null
+          python3 -m pip install -q --break-system-packages markdown-it-py pillow
+      - run: xvfb-run -a python3 tests/test_md_reader.py
+
+  instalar:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      MD_READER_NO_LAUNCH: '1'
+      PYI_NO_PAUSE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: enderHugin/py-installer
+          ref: v1
+          path: _pyi
+      - name: Montar y servir el sitio en local
+        shell: bash
+        run: |
+          python -m pip install -q pillow
+          python _pyi/pyi.py build --app . --base http://127.0.0.1:8765 --out _site
+          (cd _site && nohup python -m http.server 8765 --bind 127.0.0.1 > ../http.log 2>&1 &)
+          for i in $(seq 1 20); do curl -fsS --max-time 2 http://127.0.0.1:8765/dl/update.json > /dev/null && exit 0; sleep 1; done; exit 1
+      - name: Instalar (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: call _site\dl\install-windows.cmd
+      - name: Instalar (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p /tmp/mac && cd /tmp/mac && unzip -o "$GITHUB_WORKSPACE/_site/dl/install-macos.zip"
+          bash "Instalar md-reader.command"
+      - name: Comprobar
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then P="$LOCALAPPDATA/Programs/md-reader"; PY="$P/.venv/Scripts/python.exe"
+          else P="$HOME/Library/Application Support/md-reader/app"; PY="$P/.venv/bin/python"; test -d "$HOME/Applications/md-reader.app"; fi
+          for f in md_reader.py pyi_update.py install_info.json; do test -f "$P/$f"; done
+          "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import markdown_it, PIL, tkinter, pyi_update, md_reader; print('ok', md_reader.APP_VERSION)" "$P"
+          "$PY" "$P/pyi_update.py" "$P/md_reader.py" check | grep -q '"state": "same"'
+      - name: Registro (si algo falla)
+        if: failure()
+        shell: bash
+        run: |
+          for f in "$LOCALAPPDATA/md-reader/logs/instalacion.log" "$HOME/Library/Application Support/md-reader/logs/instalacion.log"; do [ -f "$f" ] && tail -n 80 "$f"; done; true
+
+  build:
+    needs: [pruebas, instalar]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: enderHugin/py-installer@v1
+        with:
+          base-url: https://enderhugin.github.io/md-reader
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

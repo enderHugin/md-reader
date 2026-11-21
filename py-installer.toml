@@ -1,0 +1,22 @@
+# py-installer.toml
+# Instaladores, pagina de descarga y update.json de md-reader, montados por py-installer
+# (https://github.com/enderHugin/py-installer).
+
+[app]
+id = "md-reader"
+name = "md-reader"
+entry = "md_reader.py"
+description = "Lee y edita Markdown, en claro u oscuro"
+publisher = "enderHugin"
+# Linux todavia no: el Python que instala uv trae un Tk sin fuentes suavizadas (Xft) y el texto
+# se veria mal (https://github.com/astral-sh/python-build-standalone/issues/740)
+os = ["windows", "macos"]
+
+[icon]
+png = "assets/icon.png"
+
+[deps]
+required = ["markdown-it-py", "pillow"]
+
+[check]
+code = "import markdown_it, PIL, tkinter; tkinter.Tcl()"
