@@ -49,6 +49,13 @@ Las pruebas usan una ventana de verdad: `xvfb-run -a python tests/test_md_reader
 
 **Linux, todavía no:** el Python que instala `uv` en Linux trae un Tk sin fuentes suavizadas, y el texto se vería mal ([python-build-standalone#740](https://github.com/astral-sh/python-build-standalone/issues/740)). Desde el código, con el Python del sistema (`python3-tk`), funciona bien.
 
+## Opinar y apoyar
+
+- **Opinar o avisar de un fallo:** [abre un issue](https://github.com/enderHugin/md-reader/issues/new/choose). Hay plantillas para opinión, fallo y petición de función.
+- **Apoyar:** md-reader es gratis y sin anuncios. Si te resulta útil, [invítame a un café en Ko-fi](https://ko-fi.com/jaimeluisolguinmesina). También está dentro del programa, en *Más ▸ Acerca de md-reader*.
+
+La página (`site/`) sigue el estilo de las de cam-ui y widget-arena: ES/EN, una demo en vivo del modo Dual y la descarga según tu sistema. py-installer la publica junto a los instaladores.
+
 ## Licencia
 
 MIT

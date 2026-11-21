@@ -47,6 +47,15 @@ THEMES = {
                   ed_code="#9a3412", ed_link="#1d4ed8", ed_quote="#6b7280", hr="#d5d9e0"),
 }
 MODES = [("ver", "Lector"), ("editar", "Editor"), ("dividido", "Dual")]
+SITE_URL = "https://enderhugin.github.io/md-reader/"
+REPO_URL = "https://github.com/enderHugin/md-reader"
+KOFI_URL = "https://ko-fi.com/jaimeluisolguinmesina"
+ABOUT_TAGLINE = "Lee y edita Markdown, en claro u oscuro."
+ABOUT_CHIPS = ("Lector", "Editor", "Dual", "Claro · Oscuro", "Índice", "Se actualiza solo")
+ABOUT_ASK = "Si md-reader te resulta útil, invítame a un café y ayúdame a seguir mejorándolo."
+ABOUT_BTN = "☕  Invítame a un café en Ko-fi"
+ABOUT_CREDIT = "Hecho con cariño por Jaime Luis Olguín Mesina"
+ABOUT_DEMO = "# Hola\n\nEsto es **md-reader**:\n\n- escribes *Markdown*\n- lo ves al momento\n\n> claro u oscuro\n"
 ZOOM_MIN, ZOOM_MAX = 0.6, 2.4
 
 
@@ -525,6 +534,108 @@ FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[ \t]*$", re.M | re.S)
 
 
 # ---------------------------------------------------------------------------------------------
+# Acerca de: tarjeta con una mini demo del modo Dual (se escribe Markdown y se ve al momento)
+# ---------------------------------------------------------------------------------------------
+class AboutDialog:
+    def __init__(self, app):
+        self.app = app
+        c = app.c
+        z = 1.0
+        top = self.top = tk.Toplevel(app.root)
+        top.title("Acerca de md-reader")
+        top.configure(bg=c["panel"])
+        top.resizable(False, False)
+        top.transient(app.root)
+        ui = app.ui_family
+        pad = dict(padx=22)
+        head = tk.Frame(top, bg=c["panel"])
+        head.pack(fill="x", pady=(20, 6), **pad)
+        if getattr(app, "_icon", None) is not None:
+            try:
+                self._ico = app._icon.subsample(max(1, app._icon.width() // 56))
+                tk.Label(head, image=self._ico, bg=c["panel"]).pack(side="left", padx=(0, 14))
+            except Exception:
+                pass
+        tt = tk.Frame(head, bg=c["panel"])
+        tt.pack(side="left", fill="x")
+        tk.Label(tt, text="md-reader", bg=c["panel"], fg=c["fg"], font=(ui, 20, "bold")).pack(anchor="w")
+        tk.Label(tt, text="versión %s" % APP_VERSION, bg=c["panel"], fg=c["muted"], font=(ui, 9)).pack(anchor="w")
+        tk.Label(top, text=ABOUT_TAGLINE, bg=c["panel"], fg=c["fg"], font=(ui, 11)).pack(anchor="w", pady=(6, 10), **pad)
+
+        # mini demo: editor | lector
+        demo = tk.Frame(top, bg=c["line"], bd=0)
+        demo.pack(fill="x", **pad)
+        self.ed = tk.Text(demo, width=24, height=9, wrap="word", relief="flat", bd=0, highlightthickness=0,
+                          bg=c["ed_bg"], fg=c["ed_fg"], font=(app.mono_family, 9), padx=10, pady=8, cursor="")
+        self.ed.pack(side="left", fill="both", padx=(1, 0), pady=1)
+        self.vw = tk.Text(demo, width=26, height=9, wrap="word", relief="flat", bd=0, highlightthickness=0, cursor="")
+        self.vw.pack(side="left", fill="both", expand=True, padx=1, pady=1)
+        self.mini = Renderer(_MiniApp(app), self.vw)
+        self.vw.configure(padx=10, pady=6)
+
+        chips = tk.Frame(top, bg=c["panel"])
+        chips.pack(fill="x", pady=(12, 4), **pad)
+        for r in range(0, len(ABOUT_CHIPS), 3):
+            row = tk.Frame(chips, bg=c["panel"])
+            row.pack(anchor="w", pady=3)
+            for ch in ABOUT_CHIPS[r:r + 3]:
+                tk.Label(row, text=ch, bg=c["panel2"], fg=c["fg"], font=(ui, 8), padx=8, pady=3).pack(side="left", padx=(0, 6))
+
+        tk.Label(top, text=ABOUT_ASK, bg=c["panel"], fg=c["fg"], font=(ui, 10), wraplength=430, justify="left").pack(
+            anchor="w", pady=(10, 10), **pad)
+        btn = tk.Button(top, text=ABOUT_BTN, command=lambda: webbrowser.open(KOFI_URL), bg="#ff5e5b", fg="white",
+                        activebackground="#e94b48", activeforeground="white", relief="flat", bd=0, cursor="hand2",
+                        font=(ui, 11, "bold"), padx=18, pady=9)
+        btn.pack(fill="x", **pad)
+        links = tk.Frame(top, bg=c["panel"])
+        links.pack(pady=(12, 2))
+        for i, (txt, url) in enumerate((("Página del programa", SITE_URL), ("Código", REPO_URL),
+                                         ("Opinar o avisar de un fallo", REPO_URL + "/issues/new/choose"))):
+            if i:
+                tk.Label(links, text="·", bg=c["panel"], fg=c["muted"]).pack(side="left", padx=4)
+            lb = tk.Label(links, text=txt, bg=c["panel"], fg=c["link"], font=(ui, 9, "underline"), cursor="hand2")
+            lb.pack(side="left")
+            lb.bind("<Button-1>", lambda e, u=url: webbrowser.open(u))
+        tk.Label(top, text=ABOUT_CREDIT, bg=c["panel"], fg=c["muted"], font=(ui, 8)).pack(pady=(4, 2))
+        tk.Label(top, text="Software libre, licencia MIT", bg=c["panel"], fg=c["muted"], font=(ui, 8)).pack(pady=(0, 16))
+        top.bind("<Escape>", lambda e: top.destroy())
+        self.i = 0
+        self._tick()
+        top.update_idletasks()
+        x = app.root.winfo_rootx() + (app.root.winfo_width() - top.winfo_reqwidth()) // 2
+        y = app.root.winfo_rooty() + max(0, (app.root.winfo_height() - top.winfo_reqheight()) // 3)
+        top.geometry("+%d+%d" % (max(0, x), max(0, y)))
+        top.focus_set()
+
+    def _tick(self):
+        """Escribe la demo letra a letra (como si tecleara alguien) y la pinta al momento; al acabar, vuelve a empezar."""
+        try:
+            if not self.top.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        n = len(ABOUT_DEMO)
+        self.i = self.i + 1 if self.i < n + 40 else 0
+        txt = ABOUT_DEMO[:min(self.i, n)]
+        self.ed.configure(state="normal")
+        self.ed.delete("1.0", "end")
+        self.ed.insert("1.0", txt + ("▏" if self.i <= n and self.i % 2 else ""))
+        self.ed.configure(state="disabled")
+        self.mini.render(txt, None)
+        self.top.after(55 if self.i <= n else 90, self._tick)
+
+
+class _MiniApp:
+    """Lo que el Renderer necesita de la aplicacion, a tamano pequeno (para la demo del Acerca de)."""
+    def __init__(self, app):
+        self.c, self.zoom = app.c, 0.75
+        self.body_family, self.mono_family, self.body_size = app.body_family, app.mono_family, app.body_size
+
+    def follow_link(self, href):
+        pass
+
+
+# ---------------------------------------------------------------------------------------------
 # La aplicacion
 # ---------------------------------------------------------------------------------------------
 class App:
@@ -708,7 +819,8 @@ class App:
         if sys.platform == "win32":
             m.add_command(label="Abrir los .md con md-reader", command=self.associate_md)
         m.add_command(label="Buscar actualizaciones…", command=self.show_updates)
-        m.add_command(label="Acerca de md-reader", command=self.about)
+        m.add_separator()
+        m.add_command(label="☕  Acerca de md-reader y apoyarlo", command=self.about)
         for w in (m, rec, th):
             w.configure(bg=self.c["panel"], fg=self.c["fg"], activebackground=self.c["acc"], activeforeground="white",
                         relief="flat", borderwidth=1, font=(self.ui_family, 9))
@@ -1315,7 +1427,14 @@ class App:
             messagebox.showerror(APP_NAME, "No se pudo: %s" % e, parent=self.root)
 
     def about(self):
-        messagebox.showinfo(APP_NAME, "%s %s\n\nLee y edita Markdown.\nhttps://github.com/enderHugin/md-reader" % (APP_NAME, APP_VERSION), parent=self.root)
+        if getattr(self, "_about", None) is not None:
+            try:
+                if self._about.top.winfo_exists():
+                    self._about.top.lift()
+                    return
+            except tk.TclError:
+                pass
+        self._about = AboutDialog(self)
 
     def _updater_setup(self):
         self.updates = None

@@ -1,0 +1,38 @@
+# bug_report.yml
+name: Algo no funciona
+description: Un archivo se ve mal, algo no se guarda, el programa se cierra…
+title: "Fallo: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: que
+    attributes:
+      label: Qué ha pasado
+      description: Qué esperabas y qué ha ocurrido en su lugar.
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Cómo repetirlo
+      placeholder: "1. Abro un archivo con una tabla…\n2. Paso a Dual…"
+  - type: textarea
+    id: ejemplo
+    attributes:
+      label: Markdown de ejemplo
+      description: Si un documento se ve mal, pega aquí un trozo que lo reproduzca (sin datos privados).
+      render: markdown
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema y versión de md-reader
+      description: La versión sale en Más ▸ «Acerca de md-reader».
+      placeholder: "Windows 11, md-reader 0.1.0"
+  - type: textarea
+    id: log
+    attributes:
+      label: Registro de la instalación (si el problema es al instalar)
+      description: >-
+        En Windows, %LOCALAPPDATA%\md-reader\logs\instalacion.log; en macOS,
+        ~/Library/Application Support/md-reader/logs/instalacion.log.
+      render: text

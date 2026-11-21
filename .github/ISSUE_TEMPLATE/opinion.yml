@@ -1,0 +1,22 @@
+# opinion.yml
+name: Opinión / mi experiencia
+description: Cuéntame cómo te ha ido con md-reader, aunque todo haya ido bien.
+title: "Opinión: "
+labels: ["opinión"]
+body:
+  - type: textarea
+    id: experiencia
+    attributes:
+      label: ¿Cómo te ha ido?
+      description: Para qué usas md-reader, qué te ha gustado y qué te ha costado.
+    validations:
+      required: true
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema
+      placeholder: "Windows 11, macOS 14…"
+  - type: textarea
+    id: mejorar
+    attributes:
+      label: ¿Qué cambiarías?
