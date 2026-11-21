@@ -59,11 +59,11 @@ jobs:
       - name: Instalar (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: call _site\dl\install-windows.cmd
+        run: call _site\dl\md-reader-instalar.cmd
       - name: Instalar (macOS)
         if: runner.os == 'macOS'
         run: |
-          mkdir -p /tmp/mac && cd /tmp/mac && unzip -o "$GITHUB_WORKSPACE/_site/dl/install-macos.zip"
+          mkdir -p /tmp/mac && cd /tmp/mac && unzip -o "$GITHUB_WORKSPACE/_site/dl/md-reader-instalar-macos.zip"
           bash "Instalar md-reader.command"
       - name: Comprobar
         shell: bash
@@ -73,6 +73,16 @@ jobs:
           for f in md_reader.py pyi_update.py install_info.json; do test -f "$P/$f"; done
           "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import markdown_it, PIL, tkinter, pyi_update, md_reader; print('ok', md_reader.APP_VERSION)" "$P"
           "$PY" "$P/pyi_update.py" "$P/md_reader.py" check | grep -q '"state": "same"'
+          if [ "$RUNNER_OS" = macOS ]; then grep -q "<string>md</string>" "$HOME/Applications/md-reader.app/Contents/Info.plist"; fi
+      - name: Asociacion de .md (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ow = Get-Item 'HKCU:\Software\Classes\.md\OpenWithProgids'
+          if ($null -eq $ow.GetValue('md-reader.md', $null)) { throw 'md-reader no aparece en Abrir con de .md' }
+          $cmd = (Get-Item 'HKCU:\Software\Classes\md-reader.md\shell\open\command').GetValue('')
+          if ($cmd -notmatch 'md_reader\.py" "%1"') { throw ('orden mal: ' + $cmd) }
+          'OK: ' + $cmd
       - name: Registro (si algo falla)
         if: failure()
         shell: bash

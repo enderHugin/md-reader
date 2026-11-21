@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -124,7 +124,7 @@ Lee y edita **Markdown** con su formato de verdad: títulos, listas, tablas, có
 
 ## Para empezar
 
-- **Abrir** un archivo: `Ctrl+O`. En Windows, *Más ▸ Abrir los .md con md-reader* lo añade al «Abrir con» del explorador.
+- **Abrir** un archivo: `Ctrl+O`, o con doble clic en un `.md` (el instalador añade md-reader al «Abrir con»).
 - **Tres modos**, arriba: *Lector*, *Editor* (el texto Markdown tal cual) y *Dual* (los dos a la vez: lo que escribes se ve al momento). `Ctrl+E` cambia entre lector y editor.
 - **Guardar**: `Ctrl+S`. Si el archivo cambia fuera mientras lo ves, se recarga solo.
 - **Tema**: claro u oscuro con el botón de arriba; en *Más ▸ Tema*, también «como el sistema».
@@ -1469,7 +1469,10 @@ def main():
             pass
     root = tk.Tk(className="md-reader")
     path = next((a for a in sys.argv[1:] if not a.startswith("-")), None)
-    App(root, path)
+    app = App(root, path)
+    if sys.platform == "darwin":
+        # macOS no pasa el archivo como argumento: lo manda con un evento (doble clic, "Abrir con", arrastrar al icono)
+        root.createcommand("::tk::mac::OpenDocument", lambda *paths: paths and app.open_path(paths[0]))
     root.mainloop()
 
 

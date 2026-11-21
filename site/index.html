@@ -224,9 +224,9 @@ footer span:first-child { margin-right: auto; }
         <p class="hero-lead" data-en="md-reader shows Markdown with its real formatting and lets you edit the text as it is. Reader, editor, or both at once, in light or dark mode.">md-reader enseña el Markdown con su formato de verdad y te deja editar el texto tal cual. Lector, editor o los dos a la vez, en modo claro u oscuro.</p>
       </div>
       <div class="get">
-        <a class="dl-btn" id="download" href="dl/install-windows.cmd" download><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg></span><span id="dl-label" data-en="Download for Windows">Descargar para Windows</span></a>
+        <a class="dl-btn" id="download" href="dl/md-reader-instalar.cmd" download><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg></span><span id="dl-label" data-en="Download for Windows">Descargar para Windows</span></a>
         <small id="dl-note" data-en="Free, no ads. One click: it brings everything it needs, you don't need Python installed. Windows 10 or 11.">Gratis y sin anuncios. Un clic: trae todo lo que necesita, no hace falta tener Python. Windows 10 u 11.</small>
-        <small class="alt" id="dl-other"><span data-en="Other system:">Otro sistema:</span> <a href="dl/install-windows.cmd" download>Windows</a> · <a href="dl/install-macos.zip" download>macOS</a></small>
+        <small class="alt" id="dl-other"><span data-en="Other system:">Otro sistema:</span> <a href="dl/md-reader-instalar.cmd" download>Windows</a> · <a href="dl/md-reader-instalar-macos.zip" download>macOS</a></small>
       </div>
     </div>
 
@@ -307,14 +307,14 @@ footer span:first-child { margin-right: auto; }
           <button type="button" data-os="mac" aria-pressed="false">macOS</button>
         </div>
         <ol class="steps" data-os="win">
-          <li><h3 data-en="Download the installer">Descarga el instalador</h3><p data-en="One small file, <a href='dl/install-windows.cmd' download>install-windows.cmd</a>. You can read it before running it.">Un archivo pequeño, <a href="dl/install-windows.cmd" download>install-windows.cmd</a>. Puedes leerlo antes de ejecutarlo.</p></li>
+          <li><h3 data-en="Download the installer">Descarga el instalador</h3><p data-en="One small file, <a href='dl/md-reader-instalar.cmd' download>md-reader-instalar.cmd</a>. You can read it before running it.">Un archivo pequeño, <a href="dl/md-reader-instalar.cmd" download>md-reader-instalar.cmd</a>. Puedes leerlo antes de ejecutarlo.</p></li>
           <li><h3 data-en="Open it">Ábrelo</h3><p data-en="If Windows warns you, choose “More info” and “Run anyway”. It sets up its own Python (you don't need one) and takes a minute or two the first time.">Si Windows avisa, elige «Más información» y «Ejecutar de todos modos». Prepara su propio Python (no necesitas tenerlo) y la primera vez tarda un minuto o dos.</p></li>
-          <li><h3 data-en="Use it from the Start menu">Úsalo desde el menú Inicio</h3><p data-en="md-reader opens when it finishes. In More ▸ “Open .md files with md-reader” it adds itself to the Explorer's “Open with”.">md-reader se abre al terminar. En Más ▸ «Abrir los .md con md-reader» se añade al «Abrir con» del explorador.</p></li>
+          <li><h3 data-en="Use it from the Start menu">Úsalo desde el menú Inicio</h3><p data-en="md-reader opens when it finishes, and appears in the Explorer's “Open with” for .md files. To always open them with it: right click on one ▸ Open with ▸ Choose another app ▸ md-reader ▸ “Always”.">md-reader se abre al terminar y aparece en el «Abrir con» de los .md. Para abrirlos siempre con él: clic derecho en uno ▸ Abrir con ▸ Elegir otra aplicación ▸ md-reader ▸ «Usar siempre».</p></li>
         </ol>
         <ol class="steps" data-os="mac" hidden>
-          <li><h3 data-en="Download the installer">Descarga el instalador</h3><p data-en="<a href='dl/install-macos.zip' download>install-macos.zip</a>, and unzip it (double click).">El archivo <a href="dl/install-macos.zip" download>install-macos.zip</a>, y descomprímelo (doble clic).</p></li>
+          <li><h3 data-en="Download the installer">Descarga el instalador</h3><p data-en="<a href='dl/md-reader-instalar-macos.zip' download>md-reader-instalar-macos.zip</a>, and unzip it (double click).">El archivo <a href="dl/md-reader-instalar-macos.zip" download>md-reader-instalar-macos.zip</a>, y descomprímelo (doble clic).</p></li>
           <li><h3 data-en="Open it with right click ▸ Open">Ábrelo con clic derecho ▸ Abrir</h3><p data-en="The first time, macOS asks for confirmation because it is not from the App Store. A terminal window shows the progress.">La primera vez macOS pide confirmación porque no viene de la App Store. Se abre una ventana de terminal con el progreso.</p></li>
-          <li><h3 data-en="Find it in Applications">Encuéntralo en Aplicaciones</h3><p data-en="It ends up in the Applications folder of your user (~/Applications), and opens when it finishes.">Queda en la carpeta Aplicaciones de tu usuario (~/Applications) y se abre al terminar.</p></li>
+          <li><h3 data-en="Find it in Applications">Encuéntralo en Aplicaciones</h3><p data-en="It ends up in the Applications folder of your user (~/Applications), opens when it finishes, and appears in “Open with” for .md files.">Queda en la carpeta Aplicaciones de tu usuario (~/Applications), se abre al terminar y aparece en el «Abrir con» de los .md.</p></li>
         </ol>
       </div>
       <div class="manual">
@@ -491,9 +491,9 @@ python md_reader.py notas.md</code>
   };
   function setDownload() {
     var T = TXT[lang];
-    if (os === "mac") { dl.href = "dl/install-macos.zip"; dlLabel.textContent = T.mac; dlNote.textContent = T.nmac; }
+    if (os === "mac") { dl.href = "dl/md-reader-instalar-macos.zip"; dlLabel.textContent = T.mac; dlNote.textContent = T.nmac; }
     else if (os === "linux") { dl.removeAttribute("download"); dl.href = "#instalar"; dl.setAttribute("aria-disabled", "true"); dlLabel.textContent = T.none; dlNote.textContent = T.nlinux; }
-    else { dl.href = "dl/install-windows.cmd"; dlLabel.textContent = T.win; dlNote.textContent = T.nwin; }
+    else { dl.href = "dl/md-reader-instalar.cmd"; dlLabel.textContent = T.win; dlNote.textContent = T.nwin; }
   }
   /* pestañas de instalacion */
   function showOs(o) {

@@ -17,7 +17,7 @@
 - **Archivos recientes**.
 - **Recarga sola** si el archivo cambia fuera. Si tienes cambios sin guardar, avisa en vez de pisarlos.
 - **Guarda en el mismo formato** en que abrió el archivo: codificación, BOM y saltos de línea de Windows.
-- En Windows, *Más ▸ Abrir los .md con md-reader* lo añade al «Abrir con» del explorador.
+- **Abre los `.md` con doble clic**: el instalador añade md-reader al «Abrir con» de los `.md` y `.markdown`, en Windows y en macOS. En Windows, para que se abran siempre con él: clic derecho ▸ Abrir con ▸ Elegir otra aplicación ▸ md-reader ▸ «Usar siempre».
 - **Se actualiza solo**, con las opciones de siempre: avisar, actualizar sin preguntar, o «vigilar sola», que se revela con `Ctrl+Shift+Alt+F12` en la ventana de actualizaciones.
 
 | Claro | Dual |

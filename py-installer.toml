@@ -20,3 +20,9 @@ required = ["markdown-it-py", "pillow"]
 
 [check]
 code = "import markdown_it, PIL, tkinter; tkinter.Tcl()"
+
+# los .md aparecen en "Abrir con" con md-reader (en Windows, el instalador explica como dejarlo
+# como el de siempre: Windows no deja que un programa se elija solo para un tipo que ya tiene dueno)
+[[associate]]
+ext = [".md", ".markdown", ".mdown", ".mkd"]
+description = "Documento Markdown"
