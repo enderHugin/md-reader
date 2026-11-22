@@ -1,6 +1,11 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.2 — 2026-11-22
+- **Un poco de edición en el lector**:
+  - Clic en una casilla de tarea (☐/☑) para marcarla o desmarcarla: cambia `[ ]` ↔ `[x]` en el texto, queda «sin guardar» como cualquier edición y se deshace con `Ctrl+Z`.
+  - **Doble clic** en cualquier parte del lector: abre el editor con el cursor en esa línea del Markdown (en modo Dual, sin cambiar de modo).
+
 ## 0.1.1 — 2026-11-21
 - **Abre los .md con doble clic**: el instalador añade md-reader al «Abrir con» de los .md y .markdown (Windows y macOS). En Windows, para que se abran siempre con él: clic derecho ▸ Abrir con ▸ Elegir otra aplicación ▸ md-reader ▸ «Usar siempre».
 - En macOS, md-reader abre el archivo con el que lo lanzas (doble clic, «Abrir con» o arrastrándolo al icono).

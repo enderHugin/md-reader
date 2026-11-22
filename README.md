@@ -11,6 +11,7 @@
 
 - **Lee con formato de verdad**: títulos, negrita, cursiva, tachado, listas anidadas, casillas de tareas, tablas, código, citas, líneas, enlaces e imágenes. Los enlaces a otra sección (`#…`) o a otro `.md` se abren dentro del programa.
 - **Tres modos**: *Lector*, *Editor* (el texto Markdown tal cual, con un resaltado discreto) y *Dual* (los dos a la vez: lo que escribes se ve en el lector al momento). `Ctrl+E` cambia entre lector y editor en la misma ventana.
+- **Un poco de edición en el lector**: clic en una casilla ☐ para marcarla (cambia `[ ]` ↔ `[x]` en el texto), y doble clic en cualquier sitio para editar justo ahí.
 - **Modo claro u oscuro**, o el del sistema.
 - **Índice lateral** con los títulos del documento.
 - **Buscar** (`Ctrl+F`) y **zoom** (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`).

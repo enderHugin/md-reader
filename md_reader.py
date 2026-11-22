@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -126,6 +126,7 @@ Lee y edita **Markdown** con su formato de verdad: títulos, listas, tablas, có
 
 - **Abrir** un archivo: `Ctrl+O`, o con doble clic en un `.md` (el instalador añade md-reader al «Abrir con»).
 - **Tres modos**, arriba: *Lector*, *Editor* (el texto Markdown tal cual) y *Dual* (los dos a la vez: lo que escribes se ve al momento). `Ctrl+E` cambia entre lector y editor.
+- **En el lector**: clic en una casilla ☐ para marcarla, y **doble clic** en cualquier sitio para editar justo ahí.
 - **Guardar**: `Ctrl+S`. Si el archivo cambia fuera mientras lo ves, se recarga solo.
 - **Tema**: claro u oscuro con el botón de arriba; en *Más ▸ Tema*, también «como el sistema».
 
@@ -204,6 +205,9 @@ class Renderer:
         t.tag_raise("sel")
         t.tag_bind("link", "<Enter>", lambda e: t.configure(cursor="hand2"))
         t.tag_bind("link", "<Leave>", lambda e: t.configure(cursor=""))
+        t.tag_configure("task", foreground=c["acc"])
+        t.tag_bind("task", "<Enter>", lambda e: t.configure(cursor="hand2"))
+        t.tag_bind("task", "<Leave>", lambda e: t.configure(cursor=""))
 
     def block_tag(self, kind, depth, z):
         """Etiqueta de margen para listas y citas anidadas (se crea al vuelo)."""
@@ -222,7 +226,7 @@ class Renderer:
         t.configure(state="normal")
         t.delete("1.0", "end")
         for tag in list(t.tag_names()):
-            if tag.startswith(("li_", "tbl_", "lnk_", "q")) and tag != "quote":
+            if tag.startswith(("li_", "tbl_", "lnk_", "task_", "q")) and tag != "quote":
                 t.tag_delete(tag)
         self._fonts.clear()
         for w in self.lines:
@@ -231,6 +235,7 @@ class Renderer:
             except Exception:
                 pass
         self.images, self.lines, self.headings, self.anchors, self.links = [], [], [], {}, {}
+        self.blocks = []          # (indice en la vista, linea del Markdown) de cada bloque: para "doble clic = editar aqui"
         self.setup_tags()
         if self.md is None:
             t.insert("end", "Falta la libreria markdown-it-py (vuelve a ejecutar el instalador).\n\n", ("muted",))
@@ -252,6 +257,16 @@ class Renderer:
     def _ins(self, text, tags):
         self.t.insert("end", text, tuple(tags))
 
+    def line_at(self, index):
+        """Linea del Markdown (desde 0) del bloque que se ve en ese punto de la vista."""
+        line = 0
+        for idx, ln in self.blocks:
+            if self.t.compare(idx, "<=", index):
+                line = ln
+            else:
+                break
+        return line
+
     def _render_tokens(self, toks):
         z = self.app.zoom
         lists = []                  # pila: {"ordered", "n", "tight"}
@@ -261,9 +276,12 @@ class Renderer:
         pending_item = None         # prefijo de la vineta pendiente de pintar
         table = None
         heading = None
+        pending_task = None         # linea del Markdown de la casilla pendiente de pintar
         while i < len(toks):
             tk_ = toks[i]
             ty = tk_.type
+            if tk_.map and (ty.endswith("_open") or ty in ("fence", "code_block", "hr", "html_block")):
+                self.blocks.append((self.t.index("end-1c"), tk_.map[0]))
             if ty == "heading_open":
                 heading = int(tk_.tag[1])
                 start = self.t.index("end-1c")
@@ -292,8 +310,16 @@ class Renderer:
                 if heading:
                     base = base + ["h%d" % heading]
                 if pending_item is not None:
-                    self._ins(pending_item, base + [self.font_tag(bold=False)])
-                    pending_item = None
+                    tags = base + [self.font_tag(bold=False)]
+                    if pending_task is not None:
+                        glyph, rest = pending_item[0], pending_item[1:]
+                        name = "task_%d" % pending_task
+                        self.t.tag_bind(name, "<Button-1>", lambda e, ln=pending_task: self.app.toggle_task(ln))
+                        self._ins(glyph, tags + ["task", name, self.font_tag(size=1.15)])
+                        self._ins(rest, tags)
+                    else:
+                        self._ins(pending_item, tags)
+                    pending_item = pending_task = None
                 self._inline(tk_.children or [], base, heading=heading, table=table)
             elif ty in ("bullet_list_open", "ordered_list_open"):
                 tight = True
@@ -332,6 +358,8 @@ class Renderer:
                         if first.type == "text" and first.content.startswith(m.group(0)):
                             first.content = first.content[len(m.group(0)):]
                             pending_item = ("☑" if m.group(1) in "xX" else "☐") + "\t"
+                            if tk_.map:
+                                pending_task = tk_.map[0]
             elif ty == "list_item_close":
                 pass
             elif ty == "blockquote_open":
@@ -785,6 +813,9 @@ class App:
         v_sb.pack(side="right", fill="y")
         self.view.pack(fill="both", expand=True)
         self.view.bind("<Configure>", lambda e: self.renderer.fit_lines())
+        self.view.bind("<Double-Button-1>", self._edit_here)
+        for seq in ("<Control-z>", "<Control-Z>", "<Control-y>"):      # deshacer tambien desde el lector (p.ej. una casilla)
+            self.view.bind(seq, lambda e, s=seq: (self._undo_from_view(redo=s != "<Control-z>"), "break")[1])
         self.renderer = Renderer(self, self.view)
 
         self.status = ttk.Label(r, text="", style="Status.TLabel", anchor="w")
@@ -1239,6 +1270,7 @@ class App:
 
     def wrap_sel(self, mark):
         ed = self.editor
+        ed.configure(autoseparators=False)
         try:
             a, b = ed.index("sel.first"), ed.index("sel.last")
             ed.edit_separator()
@@ -1249,6 +1281,7 @@ class App:
             ed.insert("insert", mark + mark)
             ed.mark_set("insert", "insert-%dc" % len(mark))
         ed.edit_separator()
+        ed.configure(autoseparators=True)
 
     def _redo(self):
         try:
@@ -1268,6 +1301,62 @@ class App:
                 self.view.yview_moveto(self.editor.yview()[0])
             finally:
                 self._syncing = False
+
+    # -- un poco de edicion desde el lector -----------------------------------------------------
+    TASK_RX = re.compile(r"^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])")
+
+    def toggle_task(self, line):
+        """Clic en una casilla del lector: [ ] <-> [x] en el texto (como cualquier edicion: se guarda con Ctrl+S
+        y se deshace con Ctrl+Z)."""
+        now = time.time()
+        if getattr(self, "_last_toggle", (None, 0))[0] == line and now - self._last_toggle[1] < 0.35:
+            return "break"          # el segundo clic de un doble clic no la vuelve a cambiar
+        self._last_toggle = (line, now)
+        ln = line + 1
+        text = self.editor.get("%d.0" % ln, "%d.end" % ln)
+        m = self.TASK_RX.match(text)
+        if not m:
+            return "break"
+        col = m.start(2)
+        new = " " if m.group(2) in "xX" else "x"
+        ed = self.editor
+        ed.configure(autoseparators=False)          # borrar + escribir = un solo paso de Ctrl+Z
+        try:
+            ed.edit_separator()
+            ed.delete("%d.%d" % (ln, col), "%d.%d" % (ln, col + 1))
+            ed.insert("%d.%d" % (ln, col), new)
+            ed.edit_separator()
+        finally:
+            ed.configure(autoseparators=True)
+        self.render_now()
+        self.highlight()
+        self._update_title()
+        return "break"
+
+    def _edit_here(self, e):
+        """Doble clic en el lector: el editor, con el cursor en esa parte del Markdown."""
+        idx = self.view.index("@%d,%d" % (e.x, e.y))
+        if "task" in self.view.tag_names(idx):
+            return "break"
+        line = self.renderer.line_at(idx) + 1
+        if self.mode == "ver":
+            self.set_mode("editar")
+        ed = self.editor
+        ed.mark_set("insert", "%d.0 lineend" % line)
+        ed.see("insert")
+        ed.focus_set()
+        ed.tag_remove("sel", "1.0", "end")
+        self.root.after(30, lambda: (ed.see("insert"), ed.focus_set()))
+        return "break"
+
+    def _undo_from_view(self, redo=False):
+        try:
+            (self.editor.edit_redo if redo else self.editor.edit_undo)()
+        except tk.TclError:
+            return
+        self.render_now()
+        self.highlight()
+        self._update_title()
 
     # -- enlaces e indice -------------------------------------------------------------------------
     def follow_link(self, href):

@@ -127,5 +127,44 @@ app.set_mode("ver")
 app.editor.insert("1.0", "<div>html</div>\n\n- [ ] tarea\n  1. dentro\n\n> cita\n> > anidada\n\n![no existe](nada.png)\n\n```\n```\n")
 app.render_now()
 ok("tarea" in app.view.get("1.0", "end") and "☐" in app.view.get("1.0", "end"), "html, tareas, listas y citas anidadas, imagen que falta")
+# un poco de edicion desde el lector: casillas y doble clic
+app.set_mode("ver")
+src = "# Tareas\n\nIntro.\n\n- [ ] uno\n- [x] dos\n\n> - [ ] en cita\n\nFinal del texto.\n"
+app.editor.delete("1.0", "end")
+app.editor.insert("1.0", src)
+app.saved_text = src
+app.render_now()
+pump(root, 200)
+tasks = sorted(t for t in app.view.tag_names() if t.startswith("task_"))
+ok(tasks == ["task_4", "task_5", "task_7"], "casillas clicables con su linea del Markdown (%s)" % tasks)
+
+
+def click_tag(tag):
+    a = app.view.tag_ranges(tag)[0]
+    x, y, w, h = app.view.bbox(a)
+    app.view.event_generate("<Motion>", x=x + w // 2, y=y + h // 2)
+    app.view.event_generate("<Button-1>", x=x + w // 2, y=y + h // 2)
+    app.view.event_generate("<ButtonRelease-1>", x=x + w // 2, y=y + h // 2)
+    pump(root, 120)
+
+
+click_tag("task_4")
+ok(app.text().splitlines()[4] == "- [x] uno", "clic en ☐ la marca en el texto")
+ok("☑" in app.view.get("1.0", "end") and app.dirty(), "se ve marcada y queda sin guardar")
+time.sleep(0.4)
+click_tag("task_5")
+ok(app.text().splitlines()[5] == "- [ ] dos", "clic en ☑ la desmarca")
+time.sleep(0.4)
+click_tag("task_7")
+ok(app.text().splitlines()[7] == "> - [x] en cita", "tambien dentro de una cita")
+app._undo_from_view()
+ok(app.text().splitlines()[7] == "> - [ ] en cita", "Ctrl+Z desde el lector la deshace")
+
+i = app.view.search("Final del texto", "1.0")
+x, y, w, h = app.view.bbox(i)
+app._edit_here(type("E", (), {"x": x + 5, "y": y + h // 2})())     # Tk no deja simular un doble clic
+pump(root, 150)
+ok(app.mode == "editar" and app.editor.index("insert").split(".")[0] == "10", "doble clic: al editor, en esa linea (%s)" % app.editor.index("insert"))
+
 root.destroy()
 print("TODO OK")
