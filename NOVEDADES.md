@@ -1,6 +1,13 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.3 — 2026-11-22
+- **Ya no se come saltos de línea.** Cada salto de línea del texto se respeta (como en Obsidian o en los comentarios de GitHub). Una lista numerada se reconoce aunque vaya pegada a una línea de texto o empiece por un número distinto de 1. Para el Markdown estricto: *Más ▸ Respetar los saltos de línea*.
+- Los párrafos vuelven a tener su separación.
+- **Guía de formatos** (`F1`, o *Más ▸ Guía de formatos*): cada formato con cómo se escribe y cómo se ve.
+- **Botón derecho** sobre lo seleccionado, en el editor o en el lector: negrita, cursiva, tachado, código, enlace, títulos, listas, casillas, cita o bloque de código. Si ya lo tiene, lo quita. Se deshace con `Ctrl+Z`.
+- `Ctrl+K` en el editor: enlace.
+
 ## 0.1.2 — 2026-11-22
 - **Un poco de edición en el lector**:
   - Clic en una casilla de tarea (☐/☑) para marcarla o desmarcarla: cambia `[ ]` ↔ `[x]` en el texto, queda «sin guardar» como cualquier edición y se deshace con `Ctrl+Z`.

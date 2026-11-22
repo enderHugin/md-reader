@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -150,6 +150,143 @@ print("hola desde md-reader")
 """
 
 
+GUIDE = """# Guía de formatos
+
+Cada formato, con **cómo se escribe** (el recuadro) y **cómo se ve** (debajo). Puedes ponerlos a mano o seleccionar un trozo y usar el **botón derecho** del ratón, en el editor o en el lector.
+
+## Texto
+
+```
+**negrita**   *cursiva*   ***las dos***   ~~tachado~~   `código`
+```
+
+**negrita**   *cursiva*   ***las dos***   ~~tachado~~   `código`
+
+Atajos en el editor: `Ctrl+B` negrita, `Ctrl+I` cursiva.
+
+## Títulos
+
+```
+# Título grande
+## Título mediano
+### Título pequeño
+```
+
+Un `#` al principio de la línea, seguido de un espacio. Hasta seis niveles (`######`). Salen en el *Índice*.
+
+## Párrafos y saltos de línea
+
+```
+Un párrafo.
+Esta línea sale debajo.
+
+Una línea en blanco empieza otro párrafo.
+```
+
+Un párrafo.
+Esta línea sale debajo.
+
+Una línea en blanco empieza otro párrafo.
+
+(En *Más ▸ Respetar los saltos de línea* puedes pasar al Markdown estricto, donde un salto simple se convierte en espacio.)
+
+## Listas
+
+```
+- un punto
+- otro punto
+  - uno dentro (dos espacios delante)
+
+1. primero
+2. segundo
+```
+
+- un punto
+- otro punto
+  - uno dentro (dos espacios delante)
+
+1. primero
+2. segundo
+
+## Casillas de tareas
+
+```
+- [ ] pendiente
+- [x] hecha
+```
+
+- [ ] pendiente
+- [x] hecha
+
+En el lector, un clic en la casilla la marca o la desmarca.
+
+## Enlaces e imágenes
+
+```
+[texto del enlace](https://ejemplo.com)
+[a otra sección](#tablas)
+![descripción](foto.png)
+```
+
+[texto del enlace](https://ejemplo.com) · [a otra sección](#tablas)
+
+Las imágenes se buscan junto al archivo `.md` (por ejemplo, `foto.png` en la misma carpeta).
+
+## Citas
+
+```
+> Esto es una cita.
+> Puede tener **formato**.
+```
+
+> Esto es una cita.
+> Puede tener **formato**.
+
+## Código
+
+````
+```
+un bloque de código
+  respeta los espacios
+```
+````
+
+```
+un bloque de código
+  respeta los espacios
+```
+
+## Tablas
+
+```
+| Columna | Otra |
+|---|---|
+| a | b |
+| c | d |
+```
+
+| Columna | Otra |
+|---|---|
+| a | b |
+| c | d |
+
+## Línea horizontal
+
+```
+---
+```
+
+---
+
+## En el lector
+
+- **Clic** en una casilla: la marca o la desmarca.
+- **Doble clic** en cualquier sitio: al editor, justo en esa línea.
+- **Botón derecho** sobre un trozo seleccionado: darle formato sin pasar al editor.
+- `Ctrl+Z` deshace también desde el lector.
+"""
+
+
 # ---------------------------------------------------------------------------------------------
 # Del Markdown al widget de texto
 # ---------------------------------------------------------------------------------------------
@@ -242,7 +379,8 @@ class Renderer:
             t.insert("end", src)
         else:
             try:
-                self._render_tokens(self.md.parse(src))
+                src2, self.line_map = self._lenient(src) if self.app.cfg.get("breaks", True) else (src, None)
+                self._render_tokens(self.md.parse(src2))
             except Exception as e:                       # nunca dejar la vista en blanco
                 t.delete("1.0", "end")
                 t.insert("end", "No se pudo dar formato a este documento (%s). Se muestra tal cual:\n\n" % e, ("muted",))
@@ -256,6 +394,37 @@ class Renderer:
 
     def _ins(self, text, tags):
         self.t.insert("end", text, tuple(tags))
+
+    FENCE_LINE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+    OL_LINE = re.compile(r"^\s{0,3}\d{1,9}[.)]\s")
+    ITEM_LINE = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s")
+
+    def _lenient(self, src):
+        """Markdown "como se escribe": una lista numerada se reconoce aunque vaya pegada a una linea de texto
+        o empiece por un numero distinto de 1 (en Markdown estricto se juntaria con el parrafo de arriba).
+        Devuelve el texto para pintar y, para cada linea suya, la linea original (para clics y doble clic)."""
+        out, lmap = [], []
+        fence = None
+        prev = ""
+        for n, line in enumerate(src.split("\n")):
+            m = self.FENCE_LINE.match(line)
+            if fence:
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not line.strip().strip(fence[0]):
+                    fence = None
+            elif m:
+                fence = m.group(1)
+            elif self.OL_LINE.match(line) and prev.strip() and not self.ITEM_LINE.match(prev) \
+                    and not prev.startswith((" ", "\t")) and not prev.lstrip().startswith(("|", ">")):
+                out.append("")
+                lmap.append(n)
+            out.append(line)
+            lmap.append(n)
+            prev = line
+        return "\n".join(out), lmap
+
+    def src_line(self, ln):
+        m = getattr(self, "line_map", None)
+        return m[ln] if m and 0 <= ln < len(m) else ln
 
     def line_at(self, index):
         """Linea del Markdown (desde 0) del bloque que se ve en ese punto de la vista."""
@@ -281,7 +450,7 @@ class Renderer:
             tk_ = toks[i]
             ty = tk_.type
             if tk_.map and (ty.endswith("_open") or ty in ("fence", "code_block", "hr", "html_block")):
-                self.blocks.append((self.t.index("end-1c"), tk_.map[0]))
+                self.blocks.append((self.t.index("end-1c"), self.src_line(tk_.map[0])))
             if ty == "heading_open":
                 heading = int(tk_.tag[1])
                 start = self.t.index("end-1c")
@@ -302,7 +471,10 @@ class Renderer:
             elif ty == "paragraph_close":
                 tight = lists and lists[-1]["tight"]
                 if not tk_.hidden or not tight:
-                    self._ins("\n", self._block_tags(lists, quote) + ["p"])
+                    # separacion entre parrafos: una linea vacia baja (con "spacing" Tk estiraria tambien el fondo
+                    # del codigo en linea de la ultima linea del parrafo)
+                    self._ins("\n", self._block_tags(lists, quote))
+                    self._ins("\n", self._block_tags(lists, quote) + ["p", self.font_tag(size=0.5)])
                 else:
                     self._ins("\n", self._block_tags(lists, quote))
             elif ty == "inline":
@@ -359,7 +531,7 @@ class Renderer:
                             first.content = first.content[len(m.group(0)):]
                             pending_item = ("☑" if m.group(1) in "xX" else "☐") + "\t"
                             if tk_.map:
-                                pending_task = tk_.map[0]
+                                pending_task = self.src_line(tk_.map[0])
             elif ty == "list_item_close":
                 pass
             elif ty == "blockquote_open":
@@ -442,7 +614,10 @@ class Renderer:
                     text = ch.content
                 else:
                     tags.append(self.font_tag(size=size, bold=bold, italic=bool(em)))
-                    text = ch.content if ty == "text" else ("\n" if ty == "hardbreak" else " ")
+                    brk = ty == "hardbreak" or (ty == "softbreak" and self.app.cfg.get("breaks", True))
+                    text = ch.content if ty == "text" else ("\n" if brk else " ")
+                    if text == "\n" and any(str(t).startswith("li_") for t in base):
+                        text = "\n\t"          # dentro de una lista, la linea siguiente sigue alineada con el texto
                 if s:
                     tags.append("s")
                 if link:
@@ -653,13 +828,60 @@ class AboutDialog:
         self.top.after(55 if self.i <= n else 90, self._tick)
 
 
-class _MiniApp:
-    """Lo que el Renderer necesita de la aplicacion, a tamano pequeno (para la demo del Acerca de)."""
+class GuideWindow:
+    """F1: la guia de formatos, pintada con el mismo lector (asi se ve exactamente como quedara)."""
     def __init__(self, app):
-        self.c, self.zoom = app.c, 0.75
+        self.app = app
+        c = app.c
+        top = self.top = tk.Toplevel(app.root)
+        top.title("Guía de formatos — md-reader")
+        top.configure(bg=c["bg"])
+        w, h = int(720 * max(1, app.zoom)), int(760 * max(1, app.zoom))
+        top.geometry("%dx%d+%d+%d" % (w, h, app.root.winfo_rootx() + 60, app.root.winfo_rooty() + 40))
+        fr = ttk.Frame(top)
+        fr.pack(fill="both", expand=True)
+        self.t = tk.Text(fr, wrap="word", relief="flat", borderwidth=0, highlightthickness=0, cursor="")
+        sb = ttk.Scrollbar(fr, orient="vertical", command=self.t.yview)
+        self.t.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        self.t.pack(fill="both", expand=True)
+        self.r = Renderer(_GuideApp(app, self), self.t)
+        self.r.render(GUIDE, None)
+        self.t.bind("<Configure>", lambda e: self.r.fit_lines())
+        top.bind("<Escape>", lambda e: top.destroy())
+        top.bind("<F1>", lambda e: top.destroy())
+        top.focus_set()
+
+
+class _GuideApp:
+    """Lo que el Renderer necesita para pintar la guia (los enlaces #... saltan dentro de la guia)."""
+    def __init__(self, app, win):
+        self.app, self.win = app, win
+        self.c, self.zoom, self.cfg = app.c, app.zoom, {"breaks": True}
         self.body_family, self.mono_family, self.body_size = app.body_family, app.mono_family, app.body_size
 
     def follow_link(self, href):
+        if href.startswith("#"):
+            mark = self.win.r.anchors.get(href[1:].lower())
+            if mark:
+                self.win.t.yview(mark)
+        elif re.match(r"^https?:", href):
+            webbrowser.open(href)
+
+    def toggle_task(self, line):
+        pass
+
+
+class _MiniApp:
+    """Lo que el Renderer necesita de la aplicacion, a tamano pequeno (para la demo del Acerca de)."""
+    def __init__(self, app):
+        self.c, self.zoom, self.cfg = app.c, 0.75, {"breaks": True}
+        self.body_family, self.mono_family, self.body_size = app.body_family, app.mono_family, app.body_size
+
+    def follow_link(self, href):
+        pass
+
+    def toggle_task(self, line):
         pass
 
 
@@ -846,6 +1068,9 @@ class App:
         for k, lab in (("sistema", "Como el sistema"), ("claro", "Claro"), ("oscuro", "Oscuro")):
             th.add_radiobutton(label=lab, value=k, variable=self.theme_var, command=lambda k=k: self.set_theme(k))
         m.add_cascade(label="Tema", menu=th)
+        self.breaks_var = tk.BooleanVar(value=self.cfg.get("breaks", True))
+        m.add_checkbutton(label="Respetar los saltos de línea", variable=self.breaks_var, command=self.toggle_breaks)
+        m.add_command(label="Guía de formatos              F1", command=self.show_guide)
         m.add_separator()
         if sys.platform == "win32":
             m.add_command(label="Abrir los .md con md-reader", command=self.associate_md)
@@ -941,8 +1166,14 @@ class App:
             for w in (self.editor, self.view):
                 w.bind(seq, lambda e, fn=fn: (fn(), "break")[1])
         r.bind_all("<Control-MouseWheel>", lambda e: self.set_zoom(self.zoom * (1.1 if e.delta > 0 else 1 / 1.1)))
-        self.editor.bind("<Control-b>", lambda e: (self.wrap_sel("**"), "break")[1])
-        self.editor.bind("<Control-i>", lambda e: (self.wrap_sel("*"), "break")[1])
+        self.editor.bind("<Control-b>", lambda e: (self.fmt_inline("**"), "break")[1])
+        self.editor.bind("<Control-i>", lambda e: (self.fmt_inline("*"), "break")[1])
+        self.editor.bind("<Control-k>", lambda e: (self.fmt_link(), "break")[1])
+        r.bind_all("<F1>", lambda e: (self.show_guide(), "break")[1])
+        btns = ("<Button-2>", "<Control-Button-1>") if sys.platform == "darwin" else ("<Button-3>",)
+        for b_ in btns:
+            self.editor.bind(b_, lambda e: self._context_menu(e, "editor"))
+            self.view.bind(b_, lambda e: self._context_menu(e, "view"))
         self.editor.bind("<Control-y>", lambda e: (self._redo(), "break")[1])
         self.editor.bind("<Control-Z>", lambda e: (self._redo(), "break")[1])
         self.editor.bind("<Tab>", self._tab)
@@ -1301,6 +1532,226 @@ class App:
                 self.view.yview_moveto(self.editor.yview()[0])
             finally:
                 self._syncing = False
+
+    # -- dar formato (menu del boton derecho, atajos) --------------------------------------------
+    LINE_PREFIX = re.compile(r"^(\s*)(?:#{1,6}\s+|>\s?|(?:[-*+]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?)?")
+    INLINE = [("Negrita", "**", "Ctrl+B"), ("Cursiva", "*", "Ctrl+I"), ("Tachado", "~~", ""), ("Código", "`", "")]
+    LINES = [("Título 1", "h1"), ("Título 2", "h2"), ("Título 3", "h3"), (None, None), ("Lista con puntos", "ul"),
+             ("Lista numerada", "ol"), ("Casilla de tarea", "task"), ("Cita", "quote"), (None, None), ("Texto normal", "plain")]
+
+    def _ed_batch(self, fn):
+        """Ejecuta un cambio en el editor como un solo paso de Ctrl+Z, y repinta."""
+        ed = self.editor
+        ed.configure(autoseparators=False)
+        try:
+            ed.edit_separator()
+            fn(ed)
+            ed.edit_separator()
+        finally:
+            ed.configure(autoseparators=True)
+        self.render_now()
+        self.highlight()
+        self._update_title()
+
+    def fmt_inline(self, mark):
+        """Pone (o quita, si ya lo tiene) negrita, cursiva, tachado o codigo a lo seleccionado."""
+        def go(ed):
+            try:
+                a, b = ed.index("sel.first"), ed.index("sel.last")
+            except tk.TclError:
+                ed.insert("insert", mark + mark)
+                ed.mark_set("insert", "insert-%dc" % len(mark))
+                return
+            txt = ed.get(a, b)
+            n = len(mark)
+            before = ed.get("%s-%dc" % (a, n), a)
+            after = ed.get(b, "%s+%dc" % (b, n))
+            if len(txt) >= 2 * n and txt.startswith(mark) and txt.endswith(mark):
+                ed.delete("%s-%dc" % (b, n), b)
+                ed.delete(a, "%s+%dc" % (a, n))
+                ed.tag_add("sel", a, "%s-%dc" % (b, 2 * n))
+            elif before == mark and after == mark and not (mark == "*" and (ed.get("%s-2c" % a, a) == "**" and ed.get(b, "%s+2c" % b) == "**" and ed.get("%s-3c" % a, a) != "***")):
+                ed.delete(b, "%s+%dc" % (b, n))
+                ed.delete("%s-%dc" % (a, n), a)
+                ed.tag_add("sel", "%s-%dc" % (a, n), "%s-%dc" % (b, n))
+            else:
+                # los espacios de los bordes, fuera (Markdown no admite "** texto **")
+                lead = len(txt) - len(txt.lstrip())
+                trail = len(txt) - len(txt.rstrip())
+                a2, b2 = "%s+%dc" % (a, lead), "%s-%dc" % (b, trail)
+                ed.insert(b2, mark)
+                ed.insert(a2, mark)
+                ed.tag_remove("sel", "1.0", "end")
+                ed.tag_add("sel", a2, "%s+%dc" % (a2, len(txt) - lead - trail + 2 * n))
+        self._ed_batch(go)
+
+    def fmt_link(self):
+        def go(ed):
+            try:
+                a, b = ed.index("sel.first"), ed.index("sel.last")
+                txt = ed.get(a, b)
+                ed.delete(a, b)
+            except tk.TclError:
+                a, txt = ed.index("insert"), "texto"
+            url = txt if re.match(r"^https?://\S+$", txt) else "https://"
+            ed.insert(a, "[%s](%s)" % (txt, url))
+            ua = "%s+%dc" % (a, len(txt) + 3)
+            ed.tag_remove("sel", "1.0", "end")
+            ed.tag_add("sel", ua, "%s+%dc" % (ua, len(url)))      # la direccion, seleccionada para escribirla
+            ed.mark_set("insert", "%s+%dc" % (ua, len(url)))
+        self._ed_batch(go)
+        self.editor.focus_set()
+
+    def _sel_lines(self):
+        ed = self.editor
+        try:
+            a, b = ed.index("sel.first"), ed.index("sel.last")
+            l1, l2 = int(a.split(".")[0]), int(b.split(".")[0])
+            if b.endswith(".0") and l2 > l1:
+                l2 -= 1
+        except tk.TclError:
+            l1 = l2 = int(ed.index("insert").split(".")[0])
+        return l1, l2
+
+    def fmt_lines(self, kind, l1=None, l2=None):
+        """Titulo, lista, casilla, cita o texto normal para las lineas seleccionadas (o la del cursor).
+        Si ya lo tienen todas, se quita."""
+        if l1 is None:
+            l1, l2 = self._sel_lines()
+
+        def kind_of(line):
+            t = line.lstrip()
+            if re.match(r"#{1,6}\s", t):
+                return "h%d" % min(3, len(t) - len(t.lstrip("#")))
+            if re.match(r"(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s", t):
+                return "task"
+            if re.match(r"[-*+]\s", t):
+                return "ul"
+            if re.match(r"\d+[.)]\s", t):
+                return "ol"
+            if t.startswith(">"):
+                return "quote"
+            return "plain"
+
+        def go(ed):
+            lines = [ed.get("%d.0" % n, "%d.end" % n) for n in range(l1, l2 + 1)]
+            textual = [x for x in lines if x.strip()]
+            undo = textual and all(kind_of(x) == kind for x in textual)
+            k = "plain" if undo else kind
+            num = 0
+            for i, line in enumerate(lines):
+                n = l1 + i
+                if not line.strip():
+                    continue
+                m = self.LINE_PREFIX.match(line)
+                indent, body = m.group(1), line[m.end():]
+                num += 1
+                pre = {"h1": "# ", "h2": "## ", "h3": "### ", "ul": "- ", "ol": "%d. " % num, "task": "- [ ] ",
+                       "quote": "> ", "plain": ""}[k]
+                if k.startswith("h"):
+                    indent = ""
+                ed.delete("%d.0" % n, "%d.end" % n)
+                ed.insert("%d.0" % n, indent + pre + body)
+            ed.tag_remove("sel", "1.0", "end")
+            ed.tag_add("sel", "%d.0" % l1, "%d.end" % l2)
+        self._ed_batch(go)
+
+    def fmt_code_block(self, l1=None, l2=None):
+        if l1 is None:
+            l1, l2 = self._sel_lines()
+
+        def go(ed):
+            ed.insert("%d.end" % l2, "\n```")
+            ed.insert("%d.0" % l1, "```\n")
+        self._ed_batch(go)
+
+    def _theme_menu(self, m):
+        m.configure(bg=self.c["panel"], fg=self.c["fg"], activebackground=self.c["acc"], activeforeground="white",
+                    relief="flat", borderwidth=1, font=(self.ui_family, 9))
+        return m
+
+    def _context_menu(self, e, where):
+        """Boton derecho: formatos para lo seleccionado (en el editor, o en el lector sobre el Markdown de ese trozo)."""
+        m = self._theme_menu(tk.Menu(self.root, tearoff=False))
+        if where == "view":
+            ok_inline, l1, l2 = self._map_view_selection(e)
+        else:
+            ok_inline, l1, l2 = True, None, None
+            self.editor.focus_set()
+        st = "normal" if ok_inline else "disabled"
+        for label, mark, key in self.INLINE:
+            m.add_command(label=label, accelerator=key, state=st, command=lambda k=mark: self.fmt_inline(k))
+        m.add_command(label="Enlace…", state=st, command=self.fmt_link)
+        m.add_separator()
+        for label, kind in self.LINES:
+            if label is None:
+                m.add_separator()
+            else:
+                m.add_command(label=label, command=lambda k=kind: self.fmt_lines(k, l1, l2) if l1 is not None else self.fmt_lines(k))
+        m.add_command(label="Bloque de código", command=lambda: self.fmt_code_block(l1, l2) if l1 is not None else self.fmt_code_block())
+        m.add_separator()
+        w = self.view if where == "view" else self.editor
+        if where == "editor":
+            m.add_command(label="Cortar", accelerator="Ctrl+X", command=lambda: w.event_generate("<<Cut>>"))
+        m.add_command(label="Copiar", accelerator="Ctrl+C", command=lambda: w.event_generate("<<Copy>>"))
+        if where == "editor":
+            m.add_command(label="Pegar", accelerator="Ctrl+V", command=lambda: w.event_generate("<<Paste>>"))
+        m.add_separator()
+        m.add_command(label="Guía de formatos", accelerator="F1", command=self.show_guide)
+        try:
+            m.tk_popup(e.x_root, e.y_root)
+        finally:
+            m.grab_release()
+        return "break"
+
+    def _map_view_selection(self, e):
+        """Lleva lo seleccionado en el lector a su sitio en el Markdown: selecciona alli el mismo texto (para los
+        formatos de texto) y devuelve las lineas de esos bloques (para titulos, listas...). Sin seleccion, el
+        bloque bajo el raton."""
+        v = self.view
+        try:
+            a, b = v.index("sel.first"), v.index("sel.last")
+            txt = v.get(a, b)
+        except tk.TclError:
+            a = b = v.index("@%d,%d" % (e.x, e.y))
+            txt = ""
+        r = self.renderer
+        l1 = r.line_at(a) + 1
+        l2 = max(l1, r.line_at(b) + 1 if txt else l1)
+        # ultima linea del ultimo bloque: hasta la siguiente linea en blanco
+        ed = self.editor
+        last = int(ed.index("end-1c").split(".")[0])
+        while l2 < last and ed.get("%d.0" % (l2 + 1), "%d.end" % (l2 + 1)).strip() and not txt:
+            l2 += 1
+        ok_inline = False
+        ed.tag_remove("sel", "1.0", "end")
+        clean = txt.strip()
+        if clean and "\t" not in clean:
+            pos = ed.search(clean, "%d.0" % l1, "end", exact=True)
+            if pos and int(pos.split(".")[0]) <= max(l2, l1) + 50:
+                ed.tag_add("sel", pos, "%s+%dc" % (pos, len(clean)))
+                ed.mark_set("insert", "%s+%dc" % (pos, len(clean)))
+                ok_inline = True
+                l2 = max(l2, int(ed.index("%s+%dc" % (pos, len(clean))).split(".")[0]))
+        if txt:
+            # para lineas: las que ocupa lo seleccionado en el Markdown
+            l2 = max(l1, l2)
+        return ok_inline, l1, l2
+
+    def show_guide(self):
+        if getattr(self, "_guide", None) is not None:
+            try:
+                if self._guide.top.winfo_exists():
+                    self._guide.top.lift()
+                    return
+            except tk.TclError:
+                pass
+        self._guide = GuideWindow(self)
+
+    def toggle_breaks(self):
+        self.cfg["breaks"] = bool(self.breaks_var.get())
+        self.save_cfg()
+        self.render_now()
 
     # -- un poco de edicion desde el lector -----------------------------------------------------
     TASK_RX = re.compile(r"^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])")
