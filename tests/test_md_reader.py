@@ -273,6 +273,23 @@ ok(cf[sf:ef] == "<b>ñ</b>".encode("utf-8") and cf[sh:sh + 6] == b"<html>" and e
 mh = md_reader.md_to_html("**a**\n- [ ] b\n")
 ok("<strong>a</strong>" in mh and "☐ b" in mh, "copiar desde el editor: Markdown a HTML")
 
+# HTML dentro del Markdown
+app.editor.delete("1.0", "end")
+app.editor.insert("1.0", '<!-- oculto -->\nTexto <span style="color:red">rojo</span> y <del>fuera **b**</del> H<sub>2</sub>O<br>sigue\n\n<div align="center">Centro <b>x</b></div>\n')
+app.render_now()
+pump(root, 100)
+v = app.view.get("1.0", "end")
+rr = app.view.tag_ranges("hc_ff0000")
+ok("oculto" not in v and "<span" not in v and "<del" not in v, "HTML: las etiquetas y comentarios no se ven")
+ok(rr and app.view.get(rr[0], rr[1]) == "rojo", "HTML: color en linea")
+st = app.view.tag_ranges("s")
+ok(st and "fuera" in app.view.get(st[0], st[-1]), "HTML: <del> tacha")
+ok("\nsigue" in v and app.view.tag_ranges("sub"), "HTML: <br> y <sub>")
+cr = app.view.tag_ranges("center")
+ok(cr and "Centro" in app.view.get(cr[0], cr[1]), "HTML: bloque centrado")
+h, _ = md_reader.html_from_view(app.view, "1.0", "end", app.renderer.links)
+ok('color:#ff0000' in h and "<s>" in h and "text-align:center" in h, "HTML: se copia con color y centrado")
+
 # guia
 app.show_guide()
 pump(root, 200)

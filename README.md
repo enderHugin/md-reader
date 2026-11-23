@@ -7,6 +7,8 @@
 
 ![md-reader en modo oscuro](docs/oscuro.png)
 
+- Un poco de **HTML** (colores, tachado, subrayado, centrado…) se ve con su formato; los comentarios no se muestran.
+
 ## Qué hace
 
 - **Lee con formato de verdad**: títulos, negrita, cursiva, tachado, listas anidadas, casillas de tareas, tablas, código, citas, líneas, enlaces e imágenes. Los enlaces a otra sección (`#…`) o a otro `.md` se abren dentro del programa.

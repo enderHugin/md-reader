@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.4"
+APP_VERSION = "0.1.5"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -278,6 +278,22 @@ un bloque de código
 
 ---
 
+## HTML
+
+También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado, no las etiquetas, y nada se ejecuta.
+
+```
+<span style="color:red">en rojo</span>
+<del style="color:red">tachado en rojo</del>
+<u>subrayado</u>, <mark>resaltado</mark>, H<sub>2</sub>O, x<sup>2</sup>
+<div align="center">centrado</div>
+<!-- un comentario: no se ve -->
+```
+
+<span style="color:red">en rojo</span>, <del style="color:red">tachado en rojo</del>, <u>subrayado</u>, <mark>resaltado</mark>, H<sub>2</sub>O, x<sup>2</sup>
+
+<div align="center">centrado</div>
+
 ## En el lector
 
 - **Clic** en una casilla: la marca o la desmarca.
@@ -324,6 +340,16 @@ def _inline_html(segs, heading=False, head_cell=False):
             t = "<b>" + t + "</b>"
         if "s" in tags:
             t = "<s>" + t + "</s>"
+        if "u" in tags:
+            t = "<u>" + t + "</u>"
+        if "sup" in tags:
+            t = "<sup>" + t + "</sup>"
+        if "sub" in tags:
+            t = "<sub>" + t + "</sub>"
+        css = ";".join(("color:#" + x[3:]) if x.startswith("hc_") else ("background-color:#" + x[3:])
+                       for x in sorted(tags) if x.startswith(("hc_", "hb_")))
+        if css:
+            t = '<span style="%s">%s</span>' % (css, t)
         if href:
             t = '<a href="%s">%s</a>' % (_html.escape(href, quote=True), t)
         out.append(t)
@@ -364,10 +390,13 @@ def html_from_view(t, a, b, links, decor=(), images=None):
 
     out, para, pre, quote, lists = [], [], [], [], []   # lists: pila de [profundidad, numerada, li_abierto]
 
+    centered = [False]
+
     def flush_para():
         if para:
-            out.append("<p>%s</p>" % "<br>".join(para))
+            out.append(('<p style="text-align:center">%s</p>' if centered[0] else "<p>%s</p>") % "<br>".join(para))
             para.clear()
+        centered[0] = False
 
     def flush_pre():
         if pre:
@@ -480,6 +509,8 @@ def html_from_view(t, a, b, links, decor=(), images=None):
             flush_para()
             quote.append(_inline_html(segs))
             continue
+        if "center" in tags:
+            centered[0] = True
         para.append(_inline_html(segs))
     flush_all(); flush_table(); close_lists()
     return "\n".join(out), plain
@@ -489,7 +520,8 @@ def md_to_html(src, breaks=True):
     """Markdown -> HTML (para "copiar con formato" desde el editor o el documento entero)."""
     if MarkdownIt is None:
         return "<pre>%s</pre>" % _html.escape(src)
-    md = MarkdownIt("commonmark", {"html": False, "breaks": breaks}).enable(["table", "strikethrough"])
+    md = MarkdownIt("commonmark", {"html": True, "breaks": breaks}).enable(["table", "strikethrough"])
+    src = re.sub(r"<!--.*?-->", "", src, flags=re.S)       # los comentarios no se copian
     h = md.render(src)
     h = h.replace("<code>", '<code style="%s">' % CSS_CODE).replace("<pre>", '<pre style="%s">' % CSS_PRE)
     h = h.replace("<blockquote>", '<blockquote style="%s">' % CSS_QUOTE).replace("<table>", '<table style="%s">' % CSS_TABLE)
@@ -575,6 +607,84 @@ def set_rich_clipboard(root, html_fragment, plain):
     root.clipboard_clear()
     root.clipboard_append(plain)
     return False
+
+
+# ---------------------------------------------------------------------------------------------
+# Un poco de HTML dentro del Markdown (colores, subrayado, centrado...), sin ejecutar nada
+# ---------------------------------------------------------------------------------------------
+ATTR_RX = re.compile(r"""([a-zA-Z_:-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?""")
+TAG_RX = re.compile(r"^<\s*(/)?\s*([a-zA-Z][a-zA-Z0-9]*)([^>]*?)(/)?\s*>$", re.S)
+HTML_INLINE_TAGS = {"b": {"bold": True}, "strong": {"bold": True}, "i": {"italic": True}, "em": {"italic": True},
+                    "u": {"under": True}, "ins": {"under": True}, "s": {"strike": True}, "del": {"strike": True},
+                    "strike": {"strike": True}, "mark": {"mark": True}, "code": {"mono": True}, "kbd": {"mono": True},
+                    "tt": {"mono": True}, "samp": {"mono": True}, "sup": {"sup": True}, "sub": {"sub": True},
+                    "small": {"size": 0.85}, "big": {"size": 1.2}, "span": {}, "font": {}, "a": {}, "abbr": {}, "q": {}}
+
+
+def html_attrs(s):
+    return {m.group(1).lower(): (m.group(2) or m.group(3) or m.group(4) or "") for m in ATTR_RX.finditer(s or "")}
+
+
+def html_style(tag, attrs):
+    """Estilo de una etiqueta HTML: lo de la propia etiqueta + su atributo style (+ color= de <font>, align=)."""
+    st = dict(HTML_INLINE_TAGS.get(tag, {}))
+    if tag == "font" and attrs.get("color"):
+        st["color"] = attrs["color"]
+    if attrs.get("align", "").lower() == "center" or tag == "center":
+        st["center"] = True
+    for decl in (attrs.get("style") or "").split(";"):
+        if ":" not in decl:
+            continue
+        k, v = [x.strip().lower() for x in decl.split(":", 1)]
+        if k == "color":
+            st["color"] = v
+        elif k in ("background-color", "background"):
+            st["bg"] = v.split()[0] if v else v
+        elif k == "font-weight":
+            st["bold"] = v in ("bold", "bolder") or (v.isdigit() and int(v) >= 600)
+        elif k == "font-style":
+            st["italic"] = v in ("italic", "oblique")
+        elif k in ("text-decoration", "text-decoration-line"):
+            st["under"] = "underline" in v
+            st["strike"] = "line-through" in v
+        elif k == "text-align":
+            st["center"] = v == "center"
+        elif k == "font-size":
+            m = re.match(r"([\d.]+)\s*(em|rem|%|px|pt)?", v)
+            kw = {"small": 0.85, "x-small": 0.75, "smaller": 0.85, "large": 1.2, "x-large": 1.45, "larger": 1.2}
+            if v in kw:
+                st["size"] = kw[v]
+            elif m:
+                n, u = float(m.group(1)), m.group(2) or "px"
+                st["size"] = n / 100 if u == "%" else n if u in ("em", "rem") else n / 15.0 if u == "px" else n / 11.0
+                st["size"] = max(0.5, min(3.0, st["size"]))
+        elif k == "font-family" and "mono" in v:
+            st["mono"] = True
+    if tag == "a" and attrs.get("href"):
+        st["href"] = attrs["href"]
+    return st
+
+
+def css_color(widget, v):
+    """Color CSS (nombre, #rgb, #rrggbb, rgb()) -> #rrggbb, o None si no se entiende."""
+    v = (v or "").strip()
+    m = re.match(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", v)
+    if m:
+        return "#%02x%02x%02x" % tuple(min(255, int(x)) for x in m.groups())
+    if re.fullmatch(r"#[0-9a-fA-F]{3}", v):
+        return "#" + "".join(c * 2 for c in v[1:]).lower()
+    try:
+        r, g, b = widget.winfo_rgb(v)
+        return "#%02x%02x%02x" % (r // 257, g // 257, b // 257)
+    except Exception:
+        return None
+
+
+def merge_styles(stack):
+    out = {}
+    for st in stack:
+        out.update({k: v for k, v in st.items() if v not in (None, False) or k in ("bold", "italic", "under", "strike")})
+    return out
 
 
 # ---------------------------------------------------------------------------------------------
@@ -686,6 +796,114 @@ class Renderer:
 
     def _ins(self, text, tags):
         self.t.insert("end", text, tuple(tags))
+
+    def html_tags(self, st, size):
+        """Etiquetas de Tk para un estilo HTML ya combinado. Devuelve (etiquetas, negrita, cursiva, mono, tamano)."""
+        tags = []
+        c = css_color(self.t, st.get("color")) if st.get("color") else None
+        if c:
+            name = "hc_" + c[1:]
+            self.t.tag_configure(name, foreground=c)
+            tags.append(name)
+        bg = css_color(self.t, st.get("bg")) if st.get("bg") else None
+        if st.get("mark") and not bg:
+            bg = self.app.c["find"]
+        if bg:
+            name = "hb_" + bg[1:]
+            self.t.tag_configure(name, background=bg)
+            tags.append(name)
+        if st.get("under"):
+            self.t.tag_configure("u", underline=True)
+            tags.append("u")
+        if st.get("strike"):
+            tags.append("s")
+        z = self.app.zoom
+        if st.get("sup"):
+            self.t.tag_configure("sup", offset=int(5 * z))
+            tags.append("sup")
+            size *= 0.75
+        if st.get("sub"):
+            self.t.tag_configure("sub", offset=-int(3 * z))
+            tags.append("sub")
+            size *= 0.75
+        if st.get("center"):
+            self.t.tag_configure("center", justify="center")
+            tags.append("center")
+        return tags, bool(st.get("bold")), bool(st.get("italic")), bool(st.get("mono")), size * st.get("size", 1.0)
+
+    def _html_block(self, content, base):
+        """Un bloque HTML (<div>, <p align=center>, comentarios...): su texto con su estilo; nada se ejecuta."""
+        from html.parser import HTMLParser
+        r = self
+        runs = []            # (texto, estilo) ; "\n" separa lineas ; ("HR", None)
+        state = {"stack": [], "skip": 0}
+
+        class P(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                a = {k: (v or "") for k, v in attrs}
+                if tag in ("script", "style", "head", "title"):
+                    state["skip"] += 1
+                    return
+                if tag == "br":
+                    runs.append(("\n", {}))
+                    return
+                if tag == "hr":
+                    runs.append(("HR", None))
+                    return
+                if tag == "img":
+                    runs.append(("[imagen: %s]" % (a.get("alt") or a.get("src") or ""), {"italic": True}))
+                    return
+                st = html_style(tag, a)
+                if re.fullmatch(r"h[1-6]", tag):
+                    st.update(bold=True, size={"h1": 1.9, "h2": 1.5, "h3": 1.25}.get(tag, 1.1))
+                if tag in ("p", "div", "center", "li", "tr", "ul", "ol", "table", "blockquote", "details", "summary") or re.fullmatch(r"h[1-6]", tag):
+                    if runs and runs[-1][0] != "\n":
+                        runs.append(("\n", {}))
+                    if tag == "li":
+                        runs.append(("•  ", merge_styles(state["stack"] + [st])))
+                state["stack"].append((tag, st))
+
+            def handle_endtag(self, tag):
+                if tag in ("script", "style", "head", "title"):
+                    state["skip"] = max(0, state["skip"] - 1)
+                    return
+                for i in range(len(state["stack"]) - 1, -1, -1):
+                    if state["stack"][i][0] == tag:
+                        del state["stack"][i:]
+                        break
+                if tag in ("p", "div", "center", "li", "tr", "ul", "ol", "table", "blockquote") or re.fullmatch(r"h[1-6]", tag):
+                    if runs and runs[-1][0] != "\n":
+                        runs.append(("\n", {}))
+
+            def handle_data(self, data):
+                if state["skip"]:
+                    return
+                data = re.sub(r"\s+", " ", data)
+                if data.strip() or (runs and runs[-1][0] not in ("\n", "HR")):
+                    runs.append((data, merge_styles([x[1] for x in state["stack"]])))
+
+        P(convert_charrefs=True).feed(content)
+        any_text = False
+        for text, st in runs:
+            if text == "HR":
+                self._hr()
+                continue
+            if text == "\n":
+                if any_text and self.t.get("end-2c", "end-1c") != "\n":
+                    self._ins("\n", base)
+                continue
+            tags, bold, italic, mono, size = self.html_tags(st, 1.0)
+            if st.get("href"):
+                name = "lnk_%d" % len(self.links)
+                self.links[name] = st["href"]
+                self.t.tag_bind(name, "<Button-1>", lambda e, h=st["href"]: self.app.follow_link(h))
+                tags += ["link", name]
+            self._ins(text, base + tags + [self.font_tag(mono=mono, size=size, bold=bold, italic=italic)])
+            any_text = True
+        if any_text:
+            if self.t.get("end-2c", "end-1c") != "\n":
+                self._ins("\n", base)
+            self._ins("\n", base + ["p", self.font_tag(size=0.5)])
 
     FENCE_LINE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
     OL_LINE = re.compile(r"^\s{0,3}\d{1,9}[.)]\s")
@@ -837,7 +1055,7 @@ class Renderer:
             elif ty == "hr":
                 self._hr()
             elif ty == "html_block":
-                self._ins(tk_.content.rstrip("\n") + "\n", self._block_tags(lists, quote) + ["muted", "p", self.font_tag(mono=True, size=0.9)])
+                self._html_block(tk_.content, self._block_tags(lists, quote))
             elif ty == "table_open":
                 table = self._table_measure(toks, i)
             elif ty == "table_close":
@@ -886,6 +1104,7 @@ class Renderer:
     def _inline(self, children, base, heading=None, table=None):
         strong = em = s = 0
         link = None
+        hstack = []                    # etiquetas HTML abiertas en esta linea: (nombre, estilo)
         size = {1: 1.9, 2: 1.5, 3: 1.25, 4: 1.1, 5: 1.0, 6: 0.95}.get(heading, 1.0)
         for ch in children:
             ty = ch.type
@@ -898,14 +1117,36 @@ class Renderer:
                         tags.append("th")
                     elif table["row"] % 2 == 1 and table["row"] > 1:
                         tags.append("tr_alt")
-                if ty == "code_inline":
-                    tags += ["code", self.font_tag(mono=True, size=size * 0.95, bold=bold, italic=bool(em))]
-                    text = ch.content
-                elif ty == "html_inline":
-                    tags += ["muted", self.font_tag(mono=True, size=size * 0.9)]
+                if ty == "html_inline":
+                    m = TAG_RX.match(ch.content.strip())
+                    if ch.content.lstrip().startswith("<!--") or not m:
+                        continue                              # comentarios: no se ven
+                    closing, name, attrs, selfclose = m.group(1), m.group(2).lower(), m.group(3), m.group(4)
+                    if name == "br":
+                        text = "\n\t" if any(str(t).startswith("li_") for t in base) else "\n"
+                        self._ins(text, tags + [self.font_tag(size=size)])
+                        continue
+                    if closing:
+                        for k in range(len(hstack) - 1, -1, -1):
+                            if hstack[k][0] == name:
+                                del hstack[k:]
+                                break
+                    elif not selfclose and name not in ("img", "hr", "wbr", "input"):
+                        hstack.append((name, html_style(name, html_attrs(attrs))))
+                    continue
+                hs = merge_styles([x[1] for x in hstack]) if hstack else {}
+                htags, hb, hi, hm, hsize = self.html_tags(hs, size) if hs else ([], False, False, False, size)
+                tags += htags
+                if hs.get("href") and not link:
+                    name = "lnk_%d" % len(self.links)
+                    self.links[name] = hs["href"]
+                    self.t.tag_bind(name, "<Button-1>", lambda e, h=hs["href"]: self.app.follow_link(h))
+                    tags += ["link", name]
+                if ty == "code_inline" or hm:
+                    tags += (["code"] if ty == "code_inline" else []) + [self.font_tag(mono=True, size=hsize * 0.95, bold=bold or hb, italic=bool(em) or hi)]
                     text = ch.content
                 else:
-                    tags.append(self.font_tag(size=size, bold=bold, italic=bool(em)))
+                    tags.append(self.font_tag(size=hsize, bold=bold or hb, italic=bool(em) or hi))
                     brk = ty == "hardbreak" or (ty == "softbreak" and self.app.cfg.get("breaks", True))
                     text = ch.content if ty == "text" else ("\n" if brk else " ")
                     if text == "\n" and any(str(t).startswith("li_") for t in base):
@@ -1027,6 +1268,7 @@ ED_RULES = [
     ("ed_code", re.compile(r"`[^`\n]+`")),
     ("ed_link", re.compile(r"!?\[[^\]\n]*\]\([^)\n]*\)")),
     ("ed_mark", re.compile(r"^(?:---+|\*\*\*+|___+)\s*$", re.M)),
+    ("ed_mark", re.compile(r"</?[a-zA-Z][^>\n]*>|<!--.*?-->")),
 ]
 FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[ \t]*$", re.M | re.S)
 
