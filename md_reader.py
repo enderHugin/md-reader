@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.6"
+APP_VERSION = "0.1.7"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -321,6 +321,16 @@ CSS_PRE = "font-family:Consolas,'Courier New',monospace;background:#f0f2f5;paddi
 CSS_QUOTE = "border-left:3px solid #3b82f6;margin:0 0 0 4px;padding:2px 10px;color:#4b5563"
 CSS_TABLE = "border-collapse:collapse"
 CSS_CELL = "border:1px solid #c8ced8;padding:4px 8px;vertical-align:top"
+# la linea: un borde fino (un <hr> sale doble y gruesa en Writer)
+CSS_RULE = "border-bottom:1px solid #c8ced8;padding-bottom:2px;margin-bottom:8px"
+HR_HTML = '<p style="border-bottom:1px solid #c8ced8;margin:0 0 8px 0;font-size:2pt;line-height:2pt">&nbsp;</p>'
+HEAD_SIZE = {1: "20pt", 2: "16pt", 3: "13pt", 4: "12pt", 5: "11pt", 6: "11pt"}
+
+
+def _heading_html(level, inner, rule=False):
+    """Titulo con negrita y tamano explicitos (Writer y otros no siempre los ponen)."""
+    st = "font-weight:bold;font-size:%s" % HEAD_SIZE[level] + (";" + CSS_RULE if rule else "")
+    return '<h%d style="%s"><b>%s</b></h%d>' % (level, st, inner, level)
 ITEM_PREFIX = re.compile(r"^(?:[•◦▪]|\d+\.)\t")
 TASK_PREFIX = re.compile(r"^([☐☑])\t")
 
@@ -441,7 +451,10 @@ def html_from_view(t, a, b, links, decor=(), images=None):
     for line in lines:
         if line == "HR":
             flush_all(); flush_table(); close_lists()
-            out.append("<hr>")
+            if out and re.match(r"<h[1-6] ", out[-1]) and CSS_RULE not in out[-1]:
+                out[-1] = out[-1].replace('style="', 'style="%s;' % CSS_RULE, 1)     # la linea bajo el titulo
+            else:
+                out.append(HR_HTML)
             continue
         segs, tags = line
         text = "".join(x[0] for x in segs)
@@ -473,7 +486,7 @@ def html_from_view(t, a, b, links, decor=(), images=None):
         h = next((int(x[1]) for x in tags if re.fullmatch(r"h[1-6]", x)), None)
         if h:
             flush_para(); flush_quote(); close_lists()
-            out.append("<h%d>%s</h%d>" % (h, _inline_html(segs, heading=True), h))
+            out.append(_heading_html(h, _inline_html(segs, heading=True)))
             continue
         li = next((x for x in tags if x.startswith("li_")), None)
         if li:
@@ -534,6 +547,8 @@ def md_to_html(src, breaks=True):
     h = h.replace("<code>", '<code style="%s">' % CSS_CODE).replace("<pre>", '<pre style="%s">' % CSS_PRE)
     h = h.replace("<blockquote>", '<blockquote style="%s">' % CSS_QUOTE).replace("<table>", '<table style="%s">' % CSS_TABLE)
     h = re.sub(r"<(t[hd])(\s[^>]*)?>", lambda m: '<%s style="%s"%s>' % (m.group(1), CSS_CELL + (";background:#eef1f5" if m.group(1) == "th" else ""), m.group(2) or ""), h)
+    h = re.sub(r"<h([1-6])>(.*?)</h\1>", lambda m: _heading_html(int(m.group(1)), m.group(2), rule=m.group(1) in "12"), h, flags=re.S)
+    h = re.sub(r"<hr\s*/?>", HR_HTML, h)
     h = h.replace('<li>[ ] ', '<li>☐ ').replace('<li>[x] ', '<li>☑ ').replace('<li>[X] ', '<li>☑ ')
     return h
 
@@ -1032,6 +1047,8 @@ class _Md:
             txt = self.inline(k, _run_style(k, st)).strip("\n ")
             if txt.strip():
                 return [("p", self.guard(txt))]
+            if "border-bottom" in css or "border-top" in css:
+                return [("p", "---")]
             return []
         if self._is_code_box(k):                        # un editor de codigo (VS Code...): texto tal cual
             code = "".join(self._texts(k, br="\n")).strip("\n")

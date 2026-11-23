@@ -1,6 +1,10 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.7 — 2026-11-23
+- Copiar con formato a Writer (y Word): la línea bajo los títulos y las líneas `---` salen finas, ya no dobles y gruesas.
+- Los títulos copiados mantienen la negrita y su tamaño.
+
 ## 0.1.6 — 2026-11-23
 - **Pegar desde Word, Writer, Google Docs o una web.** `Ctrl+V` convierte lo copiado en Markdown: títulos, negrita, cursiva, subrayado, tachado, colores, resaltado, listas (también las de Word, con sus niveles), casillas, tablas, citas, código y enlaces. Funciona en el editor y también en el lector (lo pegado va detrás del párrafo donde estás).
 - `Ctrl+Shift+V` pega solo el texto, sin convertir.
