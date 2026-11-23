@@ -14,6 +14,7 @@
 - **Un poco de edición en el lector**: clic en una casilla ☐ para marcarla (cambia `[ ]` ↔ `[x]` en el texto), y doble clic en cualquier sitio para editar justo ahí.
 - **Botón derecho** sobre lo seleccionado (en el editor o en el lector): negrita, cursiva, tachado, código, enlace, títulos, listas, casillas, cita o bloque de código.
 - **Guía de formatos** con `F1`: cada formato, cómo se escribe y cómo se ve.
+- **Copiar con formato** para Word, Writer o el correo: `Ctrl+C` en el lector (en el editor, botón derecho ▸ *Copiar con formato*; o *Más ▸ Copiar todo con formato*).
 - **Respeta los saltos de línea** tal como los escribes (opcional: Markdown estricto).
 - **Modo claro u oscuro**, o el del sistema.
 - **Índice lateral** con los títulos del documento.

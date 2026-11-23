@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.3"
+APP_VERSION = "0.1.4"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -288,6 +288,296 @@ un bloque de código
 
 
 # ---------------------------------------------------------------------------------------------
+# Copiar con formato (para pegar en Word, Writer, correo...): HTML en el portapapeles
+# ---------------------------------------------------------------------------------------------
+import html as _html
+
+CSS_CODE = "font-family:Consolas,'Courier New',monospace;background:#f0f2f5"
+CSS_PRE = "font-family:Consolas,'Courier New',monospace;background:#f0f2f5;padding:8px;white-space:pre"
+CSS_QUOTE = "border-left:3px solid #3b82f6;margin:0 0 0 4px;padding:2px 10px;color:#4b5563"
+CSS_TABLE = "border-collapse:collapse"
+CSS_CELL = "border:1px solid #c8ced8;padding:4px 8px;vertical-align:top"
+ITEM_PREFIX = re.compile(r"^(?:[•◦▪]|\d+\.)\t")
+TASK_PREFIX = re.compile(r"^([☐☑])\t")
+
+
+def _inline_html(segs, heading=False, head_cell=False):
+    """Trozos (texto, etiquetas) -> HTML con negrita, cursiva, tachado, codigo y enlaces."""
+    out = []
+    for text, tags, href in segs:
+        if not text:
+            continue
+        if text.startswith("\x00IMG"):
+            out.append('<img src="%s">' % _html.escape(text[4:], quote=True))
+            continue
+        t = _html.escape(text).replace("\n", "<br>")
+        f = next((x for x in tags if x.startswith("f_")), None)
+        bold = italic = False
+        if f:
+            parts = f.split("_")            # f_s_14_1_0 -> familia, px, negrita, cursiva
+            bold, italic = parts[3] == "1", parts[4] == "1"
+        if "code" in tags:
+            t = '<code style="%s">%s</code>' % (CSS_CODE, t)
+        if italic:
+            t = "<i>" + t + "</i>"
+        if bold and not heading and not head_cell:
+            t = "<b>" + t + "</b>"
+        if "s" in tags:
+            t = "<s>" + t + "</s>"
+        if href:
+            t = '<a href="%s">%s</a>' % (_html.escape(href, quote=True), t)
+        out.append(t)
+    return "".join(out)
+
+
+def html_from_view(t, a, b, links, decor=(), images=None):
+    """Convierte lo que se ve en el lector entre a y b (con sus etiquetas) en HTML; asi se copia exactamente lo
+    seleccionado, aunque sea medio parrafo. Devuelve (html, texto plano)."""
+    active = set(t.tag_names(a))
+    lines, cur = [], []          # cada linea: lista de (texto, etiquetas, enlace) o "HR"
+    images = images or {}
+    for key, val, idx in t.dump(a, b, text=True, tag=True, window=True, image=True):
+        if key == "tagon":
+            active.add(val)
+        elif key == "tagoff":
+            active.discard(val)
+        elif key == "image":
+            if val in images:
+                from pathlib import Path
+                cur.append(("\x00IMG" + Path(images[val]).resolve().as_uri(), frozenset(active), None))
+        elif key == "window":
+            if val not in decor:            # la linea fina bajo los titulos es decoracion, no una <hr>
+                lines.append("HR")
+        elif key == "text":
+            tags = frozenset(active)
+            href = next((links.get(x) for x in tags if x.startswith("lnk_")), None)
+            parts = val.split("\n")
+            for i, part in enumerate(parts):
+                if part:
+                    cur.append((part, tags, href))
+                if i < len(parts) - 1:
+                    # la etiqueta de bloque la da el propio salto de linea (y lo que haya en la linea)
+                    lines.append((cur, tags | frozenset(x for _, tg, _ in cur for x in tg)))
+                    cur = []
+    if cur:
+        lines.append((cur, frozenset(x for _, tg, _ in cur for x in tg)))
+
+    out, para, pre, quote, lists = [], [], [], [], []   # lists: pila de [profundidad, numerada, li_abierto]
+
+    def flush_para():
+        if para:
+            out.append("<p>%s</p>" % "<br>".join(para))
+            para.clear()
+
+    def flush_pre():
+        if pre:
+            out.append('<pre style="%s">%s</pre>' % (CSS_PRE, "\n".join(pre)))
+            pre.clear()
+
+    def flush_quote():
+        if quote:
+            out.append('<blockquote style="%s"><p>%s</p></blockquote>' % (CSS_QUOTE, "<br>".join(quote)))
+            quote.clear()
+
+    def close_lists(depth=0):
+        while lists and lists[-1][0] > depth:
+            d, ordered, li_open = lists.pop()
+            out.append(("</li>" if li_open else "") + ("</ol>" if ordered else "</ul>"))
+
+    def flush_all():
+        flush_para()
+        flush_pre()
+        flush_quote()
+
+    table = []
+    def flush_table():
+        if table:
+            rows = []
+            for cells, head in table:
+                tag = "th" if head else "td"
+                bg = ";background:#eef1f5" if head else ""
+                rows.append("<tr>%s</tr>" % "".join('<%s style="%s%s">%s</%s>' % (tag, CSS_CELL, bg, c, tag) for c in cells))
+            out.append('<table style="%s">%s</table>' % (CSS_TABLE, "".join(rows)))
+            table.clear()
+
+    plain = t.get(a, b)
+    for line in lines:
+        if line == "HR":
+            flush_all(); flush_table(); close_lists()
+            out.append("<hr>")
+            continue
+        segs, tags = line
+        text = "".join(x[0] for x in segs)
+        if "pre_pad" in tags and not text.strip():
+            continue
+        if "pre" in tags:
+            flush_para(); flush_quote(); flush_table(); close_lists()
+            pre.append(_html.escape(text))
+            continue
+        flush_pre()
+        if not text.strip():                       # separacion entre parrafos / bloques
+            flush_para(); flush_quote(); flush_table()
+            continue
+        tbl = any(x.startswith("tbl_") for x in tags)
+        if tbl:
+            flush_para(); flush_quote(); close_lists()
+            cells, cell = [], []
+            for txt, tg, hr in segs:
+                pieces = txt.split("\t")
+                for k, piece in enumerate(pieces):
+                    if k:
+                        cells.append(cell)
+                        cell = []
+                    cell.append((piece, tg, hr))
+            cells.append(cell)
+            table.append(([_inline_html(c, head_cell="th" in tags) for c in cells], "th" in tags))
+            continue
+        flush_table()
+        h = next((int(x[1]) for x in tags if re.fullmatch(r"h[1-6]", x)), None)
+        if h:
+            flush_para(); flush_quote(); close_lists()
+            out.append("<h%d>%s</h%d>" % (h, _inline_html(segs, heading=True), h))
+            continue
+        li = next((x for x in tags if x.startswith("li_")), None)
+        if li:
+            flush_para(); flush_quote()
+            _, d, _q, ordered = li.split("_")
+            d, ordered = int(d), ordered == "1"
+            m = ITEM_PREFIX.match(text) or TASK_PREFIX.match(text)
+            # quitar la vineta / numero pintados (Word pone los suyos); las casillas se quedan como simbolo
+            body = segs
+            if m:
+                cut = len(m.group(0))
+                keep = (m.group(1) + " ") if TASK_PREFIX.match(text) else ""
+                body, n = [], 0
+                for txt, tg, hr in segs:
+                    if n >= cut:
+                        body.append((txt, tg, hr))
+                    elif n + len(txt) > cut:
+                        body.append((txt[cut - n:], tg, hr))
+                    n += len(txt)
+                if keep:
+                    body.insert(0, (keep, frozenset(), None))
+                close_lists(d)
+                if lists and lists[-1][0] == d and lists[-1][1] != ordered:
+                    close_lists(d - 1)
+                while not lists or lists[-1][0] < d:
+                    out.append("<ol>" if ordered else "<ul>")
+                    lists.append([lists[-1][0] + 1 if lists else 1, ordered, False])
+                if lists[-1][2]:
+                    out.append("</li>")
+                out.append("<li>" + _inline_html(body))
+                lists[-1][2] = True
+            else:                                   # segunda linea del mismo punto
+                body = [(x[0].lstrip("\t") if i == 0 else x[0], x[1], x[2]) for i, x in enumerate(segs)]
+                if lists and lists[-1][2]:
+                    out.append("<br>" + _inline_html(body))
+                else:
+                    para.append(_inline_html(body))
+            continue
+        close_lists()
+        if "quote" in tags:
+            flush_para()
+            quote.append(_inline_html(segs))
+            continue
+        para.append(_inline_html(segs))
+    flush_all(); flush_table(); close_lists()
+    return "\n".join(out), plain
+
+
+def md_to_html(src, breaks=True):
+    """Markdown -> HTML (para "copiar con formato" desde el editor o el documento entero)."""
+    if MarkdownIt is None:
+        return "<pre>%s</pre>" % _html.escape(src)
+    md = MarkdownIt("commonmark", {"html": False, "breaks": breaks}).enable(["table", "strikethrough"])
+    h = md.render(src)
+    h = h.replace("<code>", '<code style="%s">' % CSS_CODE).replace("<pre>", '<pre style="%s">' % CSS_PRE)
+    h = h.replace("<blockquote>", '<blockquote style="%s">' % CSS_QUOTE).replace("<table>", '<table style="%s">' % CSS_TABLE)
+    h = re.sub(r"<(t[hd])(\s[^>]*)?>", lambda m: '<%s style="%s"%s>' % (m.group(1), CSS_CELL + (";background:#eef1f5" if m.group(1) == "th" else ""), m.group(2) or ""), h)
+    h = h.replace('<li>[ ] ', '<li>☐ ').replace('<li>[x] ', '<li>☑ ').replace('<li>[X] ', '<li>☑ ')
+    return h
+
+
+def cf_html(fragment):
+    """El formato "HTML Format" del portapapeles de Windows (el que leen Word y Writer): una cabecera con las
+    posiciones, en bytes, del documento y del fragmento."""
+    head = "Version:0.9\r\nStartHTML:%010d\r\nEndHTML:%010d\r\nStartFragment:%010d\r\nEndFragment:%010d\r\n"
+    pre = '<html><head><meta charset="utf-8"></head><body style="font-family:Calibri,Arial,sans-serif">\r\n<!--StartFragment-->'
+    post = "<!--EndFragment-->\r\n</body></html>"
+    dummy = head % (0, 0, 0, 0)
+    start_html = len(dummy.encode("utf-8"))
+    start_frag = start_html + len(pre.encode("utf-8"))
+    end_frag = start_frag + len(fragment.encode("utf-8"))
+    end_html = end_frag + len(post.encode("utf-8"))
+    return (head % (start_html, end_html, start_frag, end_frag) + pre + fragment + post).encode("utf-8")
+
+
+def _win_clipboard(html_fragment, plain):
+    import ctypes
+    from ctypes import wintypes
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    u32.OpenClipboard.argtypes = [wintypes.HWND]
+    u32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    u32.SetClipboardData.restype = wintypes.HANDLE
+    u32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+    u32.RegisterClipboardFormatW.restype = wintypes.UINT
+    k32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    k32.GlobalAlloc.restype = wintypes.HGLOBAL
+    k32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    k32.GlobalLock.restype = ctypes.c_void_p
+    k32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+
+    def put(fmt, data):
+        h = k32.GlobalAlloc(0x0002, len(data))          # GMEM_MOVEABLE
+        p = k32.GlobalLock(h)
+        ctypes.memmove(p, data, len(data))
+        k32.GlobalUnlock(h)
+        if not u32.SetClipboardData(fmt, h):
+            raise OSError("SetClipboardData")
+    for _ in range(10):                                 # otro programa puede tenerlo abierto un instante
+        if u32.OpenClipboard(None):
+            break
+        time.sleep(0.05)
+    else:
+        raise OSError("el portapapeles está ocupado")
+    try:
+        u32.EmptyClipboard()
+        put(13, (plain + "\0").encode("utf-16-le"))           # CF_UNICODETEXT
+        put(u32.RegisterClipboardFormatW("HTML Format"), cf_html(html_fragment) + b"\0")
+    finally:
+        u32.CloseClipboard()
+
+
+def set_rich_clipboard(root, html_fragment, plain):
+    """Pone en el portapapeles el texto con formato (y el texto normal, para donde no se admite formato).
+    Devuelve True si fue con formato."""
+    try:
+        if sys.platform == "win32":
+            _win_clipboard(html_fragment, plain)
+            return True
+        doc = '<html><head><meta charset="utf-8"></head><body>%s</body></html>' % html_fragment
+        if sys.platform == "darwin":
+            rtf = subprocess.run(["textutil", "-stdin", "-stdout", "-format", "html", "-convert", "rtf",
+                                  "-inputencoding", "UTF-8"], input=doc.encode("utf-8"), capture_output=True, timeout=10).stdout
+            if rtf:
+                subprocess.run(["pbcopy"], input=rtf, timeout=10, check=True)
+                return True
+        else:
+            import shutil
+            if shutil.which("wl-copy") and os.environ.get("WAYLAND_DISPLAY"):
+                subprocess.run(["wl-copy", "--type", "text/html"], input=doc.encode("utf-8"), timeout=10, check=True)
+                return True
+            if shutil.which("xclip"):
+                subprocess.Popen(["xclip", "-selection", "clipboard", "-t", "text/html"], stdin=subprocess.PIPE).communicate(doc.encode("utf-8"), timeout=10)
+                return True
+    except Exception:
+        pass
+    root.clipboard_clear()
+    root.clipboard_append(plain)
+    return False
+
+
+# ---------------------------------------------------------------------------------------------
 # Del Markdown al widget de texto
 # ---------------------------------------------------------------------------------------------
 class Renderer:
@@ -373,6 +663,8 @@ class Renderer:
                 pass
         self.images, self.lines, self.headings, self.anchors, self.links = [], [], [], {}, {}
         self.blocks = []          # (indice en la vista, linea del Markdown) de cada bloque: para "doble clic = editar aqui"
+        self.decor = set()        # lineas decorativas (bajo los titulos): no se copian
+        self.image_paths = {}     # imagen del lector -> archivo (para copiarla con formato)
         self.setup_tags()
         if self.md is None:
             t.insert("end", "Falta la libreria markdown-it-py (vuelve a ejecutar el instalador).\n\n", ("muted",))
@@ -657,7 +949,8 @@ class Renderer:
                     im = im.resize((maxw, int(im.height * maxw / im.width)), Image.LANCZOS)
                 ph = ImageTk.PhotoImage(im)
                 self.images.append(ph)
-                self.t.image_create("end", image=ph, padx=2, pady=4)
+                name = self.t.image_create("end", image=ph, padx=2, pady=4)
+                self.image_paths[name] = path
                 return
             except Exception:
                 pass
@@ -681,6 +974,8 @@ class Renderer:
         c = self.app.c
         fr = tk.Frame(self.t, height=1 if thin else 2, bg=c["hr"], bd=0, highlightthickness=0)
         self.t.window_create("end", window=fr, align="center")
+        if thin:
+            self.decor.add(str(fr))
         self._ins("\n", [self.font_tag(size=0.5 if thin else 1.0)])
         self.lines.append(fr)
 
@@ -1036,6 +1331,10 @@ class App:
         self.view.pack(fill="both", expand=True)
         self.view.bind("<Configure>", lambda e: self.renderer.fit_lines())
         self.view.bind("<Double-Button-1>", self._edit_here)
+        for seq in ("<Control-c>", "<Control-C>", "<<Copy>>"):        # copiar desde el lector: con formato
+            self.view.bind(seq, lambda e: self.copy_rich_view())
+        if sys.platform == "darwin":
+            self.view.bind("<Command-c>", lambda e: self.copy_rich_view())
         for seq in ("<Control-z>", "<Control-Z>", "<Control-y>"):      # deshacer tambien desde el lector (p.ej. una casilla)
             self.view.bind(seq, lambda e, s=seq: (self._undo_from_view(redo=s != "<Control-z>"), "break")[1])
         self.renderer = Renderer(self, self.view)
@@ -1071,6 +1370,7 @@ class App:
         self.breaks_var = tk.BooleanVar(value=self.cfg.get("breaks", True))
         m.add_checkbutton(label="Respetar los saltos de línea", variable=self.breaks_var, command=self.toggle_breaks)
         m.add_command(label="Guía de formatos              F1", command=self.show_guide)
+        m.add_command(label="Copiar todo con formato (para Word…)", command=self.copy_rich_all)
         m.add_separator()
         if sys.platform == "win32":
             m.add_command(label="Abrir los .md con md-reader", command=self.associate_md)
@@ -1693,9 +1993,12 @@ class App:
         w = self.view if where == "view" else self.editor
         if where == "editor":
             m.add_command(label="Cortar", accelerator="Ctrl+X", command=lambda: w.event_generate("<<Cut>>"))
-        m.add_command(label="Copiar", accelerator="Ctrl+C", command=lambda: w.event_generate("<<Copy>>"))
-        if where == "editor":
+            m.add_command(label="Copiar (Markdown)", accelerator="Ctrl+C", command=lambda: w.event_generate("<<Copy>>"))
+            m.add_command(label="Copiar con formato (para Word…)", command=self.copy_rich_editor)
             m.add_command(label="Pegar", accelerator="Ctrl+V", command=lambda: w.event_generate("<<Paste>>"))
+        else:
+            m.add_command(label="Copiar con formato", accelerator="Ctrl+C", command=self.copy_rich_view)
+            m.add_command(label="Copiar sin formato", command=self.copy_plain_view)
         m.add_separator()
         m.add_command(label="Guía de formatos", accelerator="F1", command=self.show_guide)
         try:
@@ -1737,6 +2040,45 @@ class App:
             # para lineas: las que ocupa lo seleccionado en el Markdown
             l2 = max(l1, l2)
         return ok_inline, l1, l2
+
+    def copy_rich_view(self):
+        """Ctrl+C en el lector: lo seleccionado, con su formato (y como texto normal para donde no hay formato)."""
+        v = self.view
+        try:
+            a, b = v.index("sel.first"), v.index("sel.last")
+        except tk.TclError:
+            return "break"
+        html, plain = html_from_view(v, a, b, self.renderer.links, images=self.renderer.image_paths)   # con las lineas bajo los titulos
+        rich = set_rich_clipboard(self.root, html, plain)
+        self.flash("Copiado con formato" if rich else "Copiado (sin formato: este sistema no deja más)")
+        return "break"
+
+    def copy_plain_view(self):
+        try:
+            txt = self.view.get("sel.first", "sel.last")
+        except tk.TclError:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(txt)
+        self.flash("Copiado sin formato")
+
+    def copy_rich_editor(self):
+        """Editor: el Markdown seleccionado, convertido a texto con formato."""
+        try:
+            src = self.editor.get("sel.first", "sel.last")
+        except tk.TclError:
+            return
+        self._copy_md(src)
+
+    def copy_rich_all(self):
+        self._copy_md(self.text())
+
+    def _copy_md(self, src):
+        lenient = self.renderer._lenient(src)[0] if self.cfg.get("breaks", True) else src
+        html = md_to_html(lenient, self.cfg.get("breaks", True))
+        plain = re.sub(r"<[^>]+>", "", html.replace("<br />", "\n")).strip()
+        rich = set_rich_clipboard(self.root, html, _html.unescape(plain))
+        self.flash("Copiado con formato" if rich else "Copiado (sin formato: este sistema no deja más)")
 
     def show_guide(self):
         if getattr(self, "_guide", None) is not None:

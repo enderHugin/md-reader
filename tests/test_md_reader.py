@@ -4,6 +4,7 @@ Uso:  xvfb-run -a python tests/test_md_reader.py"""
 import os
 import sys
 import tempfile
+import re
 import time
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -248,6 +249,29 @@ app.view.tag_remove("sel", "1.0", "end")
 okin, l1, l2 = app._map_view_selection(type("E", (), {"x": x + 2, "y": y + 2})())
 app.fmt_lines("h3", l1, l2)
 ok(app.text().splitlines()[0] == "### Titulo", "lector: cambiar el nivel de un titulo")
+
+# copiar con formato
+src = "# Titulo\n\nTexto con **negrita** y *cursiva* y [enlace](https://example.com).\n\n- uno\n- [x] hecha\n  - dentro\n\n| a | b |\n|---|---|\n| 1 | `2` |\n\n```\nx = 1\n```\n"
+app.set_mode("ver")
+app.editor.delete("1.0", "end")
+app.editor.insert("1.0", src)
+app.render_now()
+h, plain = md_reader.html_from_view(app.view, "1.0", "end-1c", app.renderer.links, images=app.renderer.image_paths)
+ok(h.startswith("<h1>Titulo</h1>\n<hr>"), "copiar: titulo, con su linea debajo")
+ok("<b>negrita</b>" in h and "<i>cursiva</i>" in h and '<a href="https://example.com">enlace</a>' in h, "copiar: negrita, cursiva, enlace")
+ok("<ul>\n<li>uno" in h and "<li>☑ hecha" in h and h.count("<ul>") == 2, "copiar: listas anidadas y casillas (sin las vinetas pintadas)")
+ok("<table" in h and "<th " in h and "<code" in h and "<pre" in h and "x = 1" in h, "copiar: tabla y codigo")
+i = app.view.search("negrita", "1.0")
+h2, p2 = md_reader.html_from_view(app.view, i, "%s+12c" % i, app.renderer.links)
+ok(h2 == "<p><b>negrita</b> y *</p>".replace(" *", " ") or h2.startswith("<p><b>negrita</b>"), "copiar medio parrafo: solo lo seleccionado (%s)" % h2)
+ok(p2 == "negrita y cu", "y el texto normal (%r)" % p2)
+cf = md_reader.cf_html("<b>ñ</b>")
+hdr = cf.decode("utf-8")
+sf, ef = int(re.search(r"StartFragment:(\d+)", hdr).group(1)), int(re.search(r"EndFragment:(\d+)", hdr).group(1))
+sh, eh = int(re.search(r"StartHTML:(\d+)", hdr).group(1)), int(re.search(r"EndHTML:(\d+)", hdr).group(1))
+ok(cf[sf:ef] == "<b>ñ</b>".encode("utf-8") and cf[sh:sh + 6] == b"<html>" and eh == len(cf), "formato HTML del portapapeles de Windows (posiciones en bytes)")
+mh = md_reader.md_to_html("**a**\n- [ ] b\n")
+ok("<strong>a</strong>" in mh and "☐ b" in mh, "copiar desde el editor: Markdown a HTML")
 
 # guia
 app.show_guide()

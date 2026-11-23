@@ -83,6 +83,18 @@ jobs:
           $cmd = (Get-Item 'HKCU:\Software\Classes\md-reader.md\shell\open\command').GetValue('')
           if ($cmd -notmatch 'md_reader\.py" "%1"') { throw ('orden mal: ' + $cmd) }
           'OK: ' + $cmd
+      - name: Copiar con formato (portapapeles de verdad)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then P="$LOCALAPPDATA/Programs/md-reader"; PY="$P/.venv/Scripts/python.exe"
+          else P="$HOME/Library/Application Support/md-reader/app"; PY="$P/.venv/bin/python"; fi
+          "$PY" -c "import sys, tkinter as tk; sys.path.insert(0, sys.argv[1]); import md_reader as m; r = tk.Tk(); r.withdraw(); ok = m.set_rich_clipboard(r, '<h2>Hola</h2><p><b>negrita</b> y <i>cursiva</i></p>', 'Hola negrita y cursiva'); r.update(); print('con formato:', ok); sys.exit(0 if ok else 1)" "$P"
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell -NoProfile -Command "\$h = Get-Clipboard -TextFormatType Html; \$h; if (\$h -notmatch '<b>negrita</b>') { exit 1 }; if ((Get-Clipboard) -ne 'Hola negrita y cursiva') { exit 1 }"
+          else
+            pbpaste -Prefer rtf | tee /tmp/clip.rtf | head -c 400; echo
+            grep -q '{\\rtf' /tmp/clip.rtf && grep -q 'negrita' /tmp/clip.rtf && grep -q '\\b' /tmp/clip.rtf
+          fi
       - name: Registro (si algo falla)
         if: failure()
         shell: bash

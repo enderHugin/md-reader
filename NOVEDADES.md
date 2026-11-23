@@ -1,6 +1,12 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.4 — 2026-11-23
+- **Copiar con formato** para pegar en Word, Writer, correo…:
+  - En el lector, `Ctrl+C` copia lo seleccionado con su formato (títulos, negrita, cursiva, tachado, listas, casillas, tablas, código, citas, enlaces, imágenes y líneas). Donde no se admite formato (Bloc de notas…) se pega como texto normal.
+  - En el editor, `Ctrl+C` sigue copiando el Markdown; con el botón derecho, *Copiar con formato*.
+  - *Más ▸ Copiar todo con formato*: el documento entero, listo para pegar.
+
 ## 0.1.3 — 2026-11-22
 - **Ya no se come saltos de línea.** Cada salto de línea del texto se respeta (como en Obsidian o en los comentarios de GitHub). Una lista numerada se reconoce aunque vaya pegada a una línea de texto o empiece por un número distinto de 1. Para el Markdown estricto: *Más ▸ Respetar los saltos de línea*.
 - Los párrafos vuelven a tener su separación.
