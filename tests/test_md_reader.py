@@ -165,7 +165,10 @@ i = app.view.search("Final del texto", "1.0")
 x, y, w, h = app.view.bbox(i)
 app._edit_here(type("E", (), {"x": x + 5, "y": y + h // 2})())     # Tk no deja simular un doble clic
 pump(root, 150)
-ok(app.mode == "editar" and app.editor.index("insert").split(".")[0] == "10", "doble clic: al editor, en esa linea (%s)" % app.editor.index("insert"))
+ok(app.mode == "ver" and app.editor.index("insert").split(".")[0] == "10", "doble clic: sigue en el lector; el editor queda en esa linea (%s)" % app.editor.index("insert"))
+app.toggle_edit()
+pump(root, 100)
+ok(app.mode == "editar" and app.editor.index("insert").split(".")[0] == "10", "y Ctrl+E abre el editor ahi")
 
 # saltos de linea y listas "como se escriben"
 app.set_mode("ver")

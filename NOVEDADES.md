@@ -1,6 +1,9 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.8 — 2026-11-23
+- En el lector, el **doble clic ya no cambia al editor**: selecciona la palabra, como en cualquier lector. Para editar en ese sitio, `Ctrl+E`.
+
 ## 0.1.7 — 2026-11-23
 - Copiar con formato a Writer (y Word): la línea bajo los títulos y las líneas `---` salen finas, ya no dobles y gruesas.
 - Los títulos copiados mantienen la negrita y su tamaño.

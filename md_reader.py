@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.7"
+APP_VERSION = "0.1.8"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -126,7 +126,7 @@ Lee y edita **Markdown** con su formato de verdad: títulos, listas, tablas, có
 
 - **Abrir** un archivo: `Ctrl+O`, o con doble clic en un `.md` (el instalador añade md-reader al «Abrir con»).
 - **Tres modos**, arriba: *Lector*, *Editor* (el texto Markdown tal cual) y *Dual* (los dos a la vez: lo que escribes se ve al momento). `Ctrl+E` cambia entre lector y editor.
-- **En el lector**: clic en una casilla ☐ para marcarla, y **doble clic** en cualquier sitio para editar justo ahí.
+- **En el lector**: clic en una casilla ☐ para marcarla; `Ctrl+E` pasa al editor justo donde hiciste clic.
 - **Guardar**: `Ctrl+S`. Si el archivo cambia fuera mientras lo ves, se recarga solo.
 - **Tema**: claro u oscuro con el botón de arriba; en *Más ▸ Tema*, también «como el sistema».
 
@@ -305,7 +305,7 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 ## En el lector
 
 - **Clic** en una casilla: la marca o la desmarca.
-- **Doble clic** en cualquier sitio: al editor, justo en esa línea.
+- **Doble clic** selecciona la palabra (no cambia al editor). `Ctrl+E` abre el editor en ese sitio.
 - **Botón derecho** sobre un trozo seleccionado: darle formato sin pasar al editor.
 - `Ctrl+Z` deshace también desde el lector.
 """
@@ -2148,6 +2148,7 @@ class App:
         self.view.pack(fill="both", expand=True)
         self.view.bind("<Configure>", lambda e: self.renderer.fit_lines())
         self.view.bind("<Double-Button-1>", self._edit_here)
+        self.view.bind("<ButtonRelease-1>", self._edit_here, add="+")     # Ctrl+E abre el editor donde hiciste clic
         for seq in ("<Control-c>", "<Control-C>", "<<Copy>>"):        # copiar desde el lector: con formato
             self.view.bind(seq, lambda e: self.copy_rich_view())
         if sys.platform == "darwin":
@@ -2343,7 +2344,13 @@ class App:
 
     def toggle_edit(self):
         """Ctrl+E: lector <-> editor, en la misma ventana (desde Dual, al lector)."""
-        self.set_mode("editar" if self.mode == "ver" else "ver")
+        going = self.mode == "ver"
+        self.set_mode("editar" if going else "ver")
+        line = getattr(self, "_clicked_line", None)
+        if going and line:
+            self._clicked_line = None
+            self.editor.mark_set("insert", "%d.0 lineend" % line)
+            self.root.after(30, lambda: (self.editor.see("insert"), self.editor.focus_set()))
 
     def toggle_toc(self):
         self.cfg["toc"] = not self.cfg.get("toc")
@@ -3011,20 +3018,18 @@ class App:
         return "break"
 
     def _edit_here(self, e):
-        """Doble clic en el lector: el editor, con el cursor en esa parte del Markdown."""
+        """Doble clic en el lector: selecciona la palabra, como siempre; no cambia de modo. Deja el cursor del
+        editor en esa linea, para que Ctrl+E (o el modo Dual) lleve justo ahi."""
         idx = self.view.index("@%d,%d" % (e.x, e.y))
         if "task" in self.view.tag_names(idx):
             return "break"
         line = self.renderer.line_at(idx) + 1
-        if self.mode == "ver":
-            self.set_mode("editar")
         ed = self.editor
         ed.mark_set("insert", "%d.0 lineend" % line)
-        ed.see("insert")
-        ed.focus_set()
-        ed.tag_remove("sel", "1.0", "end")
-        self.root.after(30, lambda: (ed.see("insert"), ed.focus_set()))
-        return "break"
+        self._clicked_line = line
+        if self.mode != "ver":
+            ed.see("insert")
+        return None
 
     def _undo_from_view(self, redo=False):
         try:
