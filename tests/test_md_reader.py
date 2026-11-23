@@ -290,6 +290,41 @@ ok(cr and "Centro" in app.view.get(cr[0], cr[1]), "HTML: bloque centrado")
 h, _ = md_reader.html_from_view(app.view, "1.0", "end", app.renderer.links)
 ok('color:#ff0000' in h and "<s>" in h and "text-align:center" in h, "HTML: se copia con color y centrado")
 
+# pegar con formato (Word, Writer, Google Docs, web) -> Markdown
+H2M = md_reader.html_to_md
+word = ("<p class=MsoNormal>Hola <b>negrita</b> <span style='color:red'>rojo</span><o:p></o:p></p>"
+        "<p class=MsoListParagraph style='mso-list:l0 level1 lfo1'><![if !supportLists]><span style='mso-list:Ignore'>·<span>&nbsp; </span></span><![endif]>uno</p>"
+        "<p class=MsoListParagraph style='mso-list:l0 level2 lfo1'><![if !supportLists]><span style='mso-list:Ignore'>o<span>&nbsp; </span></span><![endif]>dos</p>")
+ok(H2M(word) == 'Hola **negrita** <span style="color:red">rojo</span>\n\n- uno\n    - dos', "pegar de Word: parrafo, color y lista con niveles")
+ok(H2M('<b style="font-weight:normal" id="docs-internal-guid-1"><h2><span style="font-weight:400">S</span></h2><p><span style="font-weight:700">F</span> n</p></b>') == "## S\n\n**F** n", "pegar de Google Docs")
+ok(H2M("<table><tr><td>a</td><td>b</td></tr><tr><td>1|2</td><td>x</td></tr></table>") == "| a | b |\n|---|---|\n| 1\\|2 | x |", "pegar una tabla")
+ok(H2M("<p>5 * 3 y - no</p><p>1. no</p>") == "5 \\* 3 y - no\n\n1\\. no", "pegar: lo que no es Markdown no se vuelve Markdown")
+src = "# T\n\nTexto **b** y *i* ~~s~~ `c` [l](https://a.b)\n\n- [ ] tarea\n- [x] hecha\n\n1. uno\n2. dos\n\n> cita\n\n| a | b |\n|---|---|\n| 1 | 2 |"
+ok(H2M(md_reader.md_to_html(src, True)) == src, "copiar con formato y volver a pegar: el mismo Markdown")
+ok(md_reader.cf_html_fragment(md_reader.cf_html("<b>ñ</b>")) == "<b>ñ</b>", "leer el HTML del portapapeles de Windows")
+real = md_reader.get_clipboard_html
+md_reader.get_clipboard_html = lambda r: "<p>Pegado <i>it</i></p>"
+app.editor.delete("1.0", "end")
+app.editor.insert("1.0", "antes\n")
+app.editor.mark_set("insert", "end-1c")
+app.editor.event_generate("<<Paste>>")
+pump(root, 50)
+ok(app.text() == "antes\nPegado *it*" and "Pegado it" in app.view.get("1.0", "end"), "Ctrl+V en el editor: entra como Markdown")
+app.editor.edit_undo()
+pump(root, 30)
+ok(app.text() == "antes\n", "y se deshace de una vez")
+app.view.mark_set("insert", "1.0")
+app.paste_rich(from_view=True)
+pump(root, 50)
+ok(app.text().startswith("antes\n\nPegado *it*"), "pegar desde el lector: detras del bloque")
+md_reader.get_clipboard_html = lambda r: None
+root.clipboard_clear(); root.clipboard_append("**solo texto**")
+app.editor.delete("1.0", "end")
+app.editor.event_generate("<<Paste>>")
+pump(root, 30)
+ok(app.text().strip() == "**solo texto**", "sin formato en el portapapeles: se pega el texto tal cual")
+md_reader.get_clipboard_html = real
+
 # guia
 app.show_guide()
 pump(root, 200)

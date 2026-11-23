@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.5"
+APP_VERSION = "0.1.6"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -140,6 +140,8 @@ Lee y edita **Markdown** con su formato de verdad: títulos, listas, tablas, có
 | `Ctrl+F` | buscar |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | más grande / más pequeño / tamaño normal |
 | `Ctrl+B` / `Ctrl+I` | (editando) **negrita** / *cursiva* |
+| `Ctrl+V` | pegar: lo copiado de Word, Writer o una web entra como Markdown |
+| `Ctrl+Shift+V` | pegar sin formato |
 | `F5` | volver a leer el archivo |
 
 > Las actualizaciones llegan solas; también puedes buscarlas en *Más ▸ Buscar actualizaciones*.
@@ -293,6 +295,12 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 <span style="color:red">en rojo</span>, <del style="color:red">tachado en rojo</del>, <u>subrayado</u>, <mark>resaltado</mark>, H<sub>2</sub>O, x<sup>2</sup>
 
 <div align="center">centrado</div>
+
+## Copiar y pegar con Word, Writer…
+
+- **Copiar**: en el lector, `Ctrl+C` copia con formato, listo para pegar en Word, Writer o un correo.
+- **Pegar**: `Ctrl+V` convierte lo copiado de Word, Writer, Google Docs o una web en Markdown: títulos, negrita, cursiva, listas, tablas, enlaces y colores.
+- `Ctrl+Shift+V` pega solo el texto, sin convertir nada.
 
 ## En el lector
 
@@ -607,6 +615,556 @@ def set_rich_clipboard(root, html_fragment, plain):
     root.clipboard_clear()
     root.clipboard_append(plain)
     return False
+
+
+# ---------------------------------------------------------------------------------------------
+# Pegar: del texto con formato (Word, Writer, navegador...) a Markdown
+# ---------------------------------------------------------------------------------------------
+def _win_clipboard_html():
+    import ctypes
+    from ctypes import wintypes
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    u32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+    u32.RegisterClipboardFormatW.restype = wintypes.UINT
+    u32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    u32.OpenClipboard.argtypes = [wintypes.HWND]
+    u32.GetClipboardData.argtypes = [wintypes.UINT]
+    u32.GetClipboardData.restype = wintypes.HANDLE
+    k32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    k32.GlobalLock.restype = ctypes.c_void_p
+    k32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    k32.GlobalSize.argtypes = [wintypes.HGLOBAL]
+    k32.GlobalSize.restype = ctypes.c_size_t
+    fmt = u32.RegisterClipboardFormatW("HTML Format")
+    if not u32.IsClipboardFormatAvailable(fmt):
+        return None
+    for _ in range(10):
+        if u32.OpenClipboard(None):
+            break
+        time.sleep(0.05)
+    else:
+        return None
+    try:
+        h = u32.GetClipboardData(fmt)
+        if not h:
+            return None
+        p = k32.GlobalLock(h)
+        try:
+            data = ctypes.string_at(p, k32.GlobalSize(h))
+        finally:
+            k32.GlobalUnlock(h)
+    finally:
+        u32.CloseClipboard()
+    return cf_html_fragment(data)
+
+
+def cf_html_fragment(data):
+    """Del formato "HTML Format" de Windows, el fragmento copiado (posiciones en bytes)."""
+    data = data.split(b"\0", 1)[0]
+    try:
+        sf = int(re.search(rb"StartFragment:\s*(-?\d+)", data).group(1))
+        ef = int(re.search(rb"EndFragment:\s*(-?\d+)", data).group(1))
+        if 0 <= sf <= ef <= len(data):
+            return data[sf:ef].decode("utf-8", "replace")
+    except Exception:
+        pass
+    s = data.decode("utf-8", "replace")
+    m = re.search(r"<!--StartFragment-->(.*)<!--EndFragment-->", s, re.S)
+    return m.group(1) if m else s[s.find("<"):]
+
+
+def get_clipboard_html(root):
+    """El HTML del portapapeles, si lo que se copio tenia formato (Word, Writer, una web...). Si no, None."""
+    try:
+        if sys.platform == "win32":
+            return _win_clipboard_html()
+        if sys.platform == "darwin":
+            for cls in ("HTML", "RTF "):
+                r = subprocess.run(["osascript", "-e", "the clipboard as «class %s»" % cls], capture_output=True, timeout=10)
+                m = re.search(rb"\xc2\xabdata \w+ ?([0-9A-Fa-f]+)\xc2\xbb", r.stdout)
+                if not m:
+                    continue
+                raw = bytes.fromhex(m.group(1).decode())
+                if cls == "HTML":
+                    return raw.decode("utf-8", "replace")
+                out = subprocess.run(["textutil", "-stdin", "-stdout", "-format", "rtf", "-convert", "html"],
+                                     input=raw, capture_output=True, timeout=10).stdout
+                return out.decode("utf-8", "replace") or None
+            return None
+        try:
+            return root.clipboard_get(type="text/html") or None
+        except tk.TclError:
+            import shutil
+            if shutil.which("wl-paste") and os.environ.get("WAYLAND_DISPLAY"):
+                r = subprocess.run(["wl-paste", "--no-newline", "--type", "text/html"], capture_output=True, timeout=10)
+                return r.stdout.decode("utf-8", "replace") if r.returncode == 0 and r.stdout else None
+    except Exception:
+        pass
+    return None
+
+
+_VOID = {"br", "hr", "img", "input", "meta", "link", "col", "wbr", "area", "base", "source"}
+_SKIP = {"script", "style", "head", "title", "xml", "template", "noscript", "o:p", "w:sdt"}
+_BLOCKS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "table", "tr", "td", "th", "thead",
+           "tbody", "tfoot", "blockquote", "pre", "hr", "section", "article", "header", "footer", "main", "nav",
+           "aside", "figure", "figcaption", "dl", "dt", "dd", "center", "address", "details", "summary", "caption"}
+_PLAIN_COLORS = {"black", "windowtext", "auto", "inherit", "initial", "currentcolor", "#000", "#000000",
+                 "rgb(0,0,0)", "text", "canvastext", "white", "#fff", "#ffffff", "transparent", "rgb(255,255,255)",
+                 "window", "none"}
+
+
+class _Node:
+    __slots__ = ("tag", "attrs", "kids", "parent")
+
+    def __init__(self, tag, attrs=None, parent=None):
+        self.tag, self.attrs, self.kids, self.parent = tag, attrs or {}, [], parent
+
+
+def _parse_html(src):
+    from html.parser import HTMLParser
+    root = _Node("#root")
+    cur = [root]
+    skip = [0]
+
+    class P(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if skip[0]:
+                if tag in _SKIP:
+                    skip[0] += 1
+                return
+            if tag in _SKIP:
+                skip[0] += 1
+                return
+            n = _Node(tag, {k: (v or "") for k, v in attrs}, cur[-1])
+            # un <p>/<li> abierto se cierra al empezar otro bloque del mismo tipo
+            if tag in ("p", "li", "tr", "td", "th") and cur[-1].tag == tag:
+                cur.pop()
+                n.parent = cur[-1]
+            cur[-1].kids.append(n)
+            if tag not in _VOID:
+                cur.append(n)
+
+        def handle_startendtag(self, tag, attrs):
+            if skip[0] or tag in _SKIP:
+                return
+            cur[-1].kids.append(_Node(tag, {k: (v or "") for k, v in attrs}, cur[-1]))
+
+        def handle_endtag(self, tag):
+            if tag in _SKIP:
+                skip[0] = max(0, skip[0] - 1)
+                return
+            if skip[0]:
+                return
+            for i in range(len(cur) - 1, 0, -1):
+                if cur[i].tag == tag:
+                    del cur[i:]
+                    break
+
+        def handle_data(self, data):
+            if not skip[0]:
+                cur[-1].kids.append(data)
+
+    P(convert_charrefs=True).feed(re.sub(r"<!\[if [^\]]*\]>|<!\[endif\]>", "", src))
+    return root
+
+
+def _style(n):
+    out = {}
+    for decl in (n.attrs.get("style") or "").split(";"):
+        if ":" in decl:
+            k, v = decl.split(":", 1)
+            out[k.strip().lower()] = v.strip().lower().replace("'", "").replace('"', "")
+    return out
+
+
+def _run_style(n, st):
+    """Estilo de texto que aporta un elemento, encima del que ya trae (st)."""
+    st = dict(st)
+    t, css = n.tag, _style(n)
+    if t in ("b", "strong"):
+        st["bold"] = True
+    if t in ("i", "em", "cite", "dfn", "var"):
+        st["italic"] = True
+    if t in ("u", "ins"):
+        st["under"] = True
+    if t in ("s", "del", "strike"):
+        st["strike"] = True
+    if t in ("code", "kbd", "samp", "tt"):
+        st["code"] = True
+    if t == "mark":
+        st["mark"] = True
+    if t in ("sup", "sub"):
+        st[t] = True
+    if t == "a" and n.attrs.get("href") and not n.attrs["href"].startswith(("javascript:", "#_")):
+        st["href"] = n.attrs["href"]
+    if t == "font" and n.attrs.get("color"):
+        st["color"] = n.attrs["color"].lower()
+    fw = css.get("font-weight")
+    if fw:
+        st["bold"] = fw in ("bold", "bolder") or (fw.isdigit() and int(fw) >= 600)
+    fs = css.get("font-style")
+    if fs:
+        st["italic"] = fs in ("italic", "oblique")
+    td = css.get("text-decoration") or css.get("text-decoration-line")
+    if td:
+        if "underline" in td:
+            st["under"] = True
+        elif td.startswith("none"):
+            st["under"] = False
+        if "line-through" in td:
+            st["strike"] = True
+    if css.get("vertical-align") in ("super", "sub"):
+        st[css["vertical-align"].replace("super", "sup")] = True
+    if "color" in css:
+        st["color"] = css["color"]
+    bg = css.get("background-color") or css.get("background") or css.get("mso-highlight")
+    if bg:
+        st["bg"] = bg.split()[0]
+    ff = css.get("font-family", "")
+    if any(x in ff for x in ("courier", "consolas", "monospace", "menlo", "monaco", "mono")):
+        st["code"] = True
+    return st
+
+
+def _md_escape(s):
+    s = s.replace("\\", "\\\\").replace("`", "\\`").replace("*", "\\*")
+    s = re.sub(r"(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])", r"\\_", s)
+    s = re.sub(r"([\[\]])", r"\\\1", s)
+    s = re.sub(r"<(?=[A-Za-z/!])", "&lt;", s)
+    return s
+
+
+class _Md:
+    def __init__(self):
+        self.in_heading = False
+
+    # ---- en linea ----
+    def runs(self, n, st, out):
+        for k in n.kids:
+            if isinstance(k, str):
+                out.append((k, st))
+                continue
+            if k.tag == "br":
+                out.append(("\n", {}))
+                continue
+            if k.tag == "img":
+                src, alt = k.attrs.get("src", ""), k.attrs.get("alt", "")
+                if src.startswith(("http://", "https://")):
+                    out.append(("\0IMG![%s](%s)" % (alt.replace("]", ""), src), {}))
+                elif alt:
+                    out.append((alt, st))
+                continue
+            if k.tag == "input" and k.attrs.get("type") == "checkbox":
+                out.append(("\0BOX" + ("[x] " if "checked" in k.attrs else "[ ] "), {}))
+                continue
+            css = _style(k)
+            if "mso-list" in css and "ignore" in css.get("mso-list", ""):
+                continue                                         # la vineta que pinta Word
+            if css.get("display") == "none" or css.get("mso-hide") == "all":
+                continue
+            self.runs(k, _run_style(k, st), out)
+        return out
+
+    def inline(self, n, st=None, pre=False):
+        runs = self.runs(n, st or {}, [])
+        return self.render_runs(runs, pre)
+
+    def render_runs(self, runs, pre=False):
+        # espacios: como en HTML, salvo en <pre>
+        norm = []
+        for text, st in runs:
+            if text.startswith("\0") or text == "\n" or pre:
+                norm.append((text, st))
+                continue
+            text = re.sub(r"[ \t\r\n\f]+", " ", text.replace("\xa0", " "))
+            if text:
+                norm.append((text, st))
+        # fusiona trozos seguidos con el mismo estilo
+        merged = []
+        for text, st in norm:
+            if merged and merged[-1][1] == st and not text.startswith("\0") and not merged[-1][0].startswith("\0") and text != "\n" and merged[-1][0] != "\n":
+                merged[-1] = (merged[-1][0] + text, st)
+            else:
+                merged.append((text, st))
+        # agrupa por enlace
+        out = []
+        i = 0
+        while i < len(merged):
+            href = merged[i][1].get("href")
+            j = i
+            while j < len(merged) and merged[j][1].get("href") == href and merged[j][0] != "\n":
+                j += 1
+            if j == i:
+                j = i + 1
+            inner = "".join(self.wrap(t, s, link=bool(href)) for t, s in merged[i:j])
+            if href and inner.strip():
+                lead = inner[:len(inner) - len(inner.lstrip())]
+                trail = inner[len(inner.rstrip()):]
+                inner = "%s[%s](%s)%s" % (lead, inner.strip(), href.replace(" ", "%20").replace(")", "%29"), trail)
+            out.append(inner)
+            i = j
+        s = "".join(out)
+        s = re.sub(r" *\n *", "\n", s) if not pre else s
+        return s
+
+    def wrap(self, text, st, link=False):
+        if text == "\n":
+            return "\n"
+        if text.startswith("\0"):
+            return text[4:]
+        if not text.strip():
+            return text
+        lead = text[:len(text) - len(text.lstrip())]
+        trail = text[len(text.rstrip()):]
+        core = text.strip()
+        if st.get("code"):
+            tick = "``" if "`" in core else "`"
+            core = tick + core + tick
+            st = {k: v for k, v in st.items() if k not in ("bg", "color")}
+        else:
+            core = _md_escape(core)
+            if st.get("bold") and not self.in_heading:
+                core = "**" + core + "**"
+            if st.get("italic"):
+                core = "*" + core + "*"
+            if st.get("strike"):
+                core = "~~" + core + "~~"
+        if st.get("under") and not link:
+            core = "<u>" + core + "</u>"
+        for t in ("sup", "sub"):
+            if st.get(t):
+                core = "<%s>%s</%s>" % (t, core, t)
+        bg = (st.get("bg") or "").replace(" ", "")
+        if st.get("mark") or bg == "yellow":
+            core = "<mark>" + core + "</mark>"
+        elif bg and bg not in _PLAIN_COLORS:
+            core = '<span style="background-color:%s">%s</span>' % (bg, core)
+        col = (st.get("color") or "").replace(" ", "")
+        if col and col not in _PLAIN_COLORS and not link and not self.in_heading:
+            core = '<span style="color:%s">%s</span>' % (col, core)
+        return lead + core + trail
+
+    # ---- bloques ----
+    def blocks(self, n, st=None):
+        """Lista de bloques: (tipo, texto). Los de tipo 'li' van seguidos, sin linea en blanco entre ellos."""
+        st = st or {}
+        out, buf = [], []
+
+        def flush():
+            if buf:
+                tmp = _Node("#p")
+                tmp.kids = list(buf)
+                txt = self.inline(tmp, st).strip("\n ")
+                if txt.strip():
+                    out.append(("p", self.guard(txt)))
+                buf.clear()
+
+        for k in n.kids:
+            if isinstance(k, str) or (k.tag not in _BLOCKS and not self.has_block(k)):
+                buf.append(k)
+                continue
+            if k.tag not in _BLOCKS:                     # <span> con bloques dentro (Google Docs: <b id=docs-internal...>)
+                flush()
+                out += self.blocks(k, _run_style(k, st))
+                continue
+            flush()
+            out += self.block(k, st)
+        flush()
+        return out
+
+    def has_block(self, n):
+        return any(not isinstance(k, str) and (k.tag in _BLOCKS or self.has_block(k)) for k in n.kids)
+
+    def guard(self, txt):
+        """Que un parrafo no se lea como titulo, lista o cita sin querer."""
+        lines = []
+        for ln in txt.split("\n"):
+            ln = re.sub(r"^(\s*)([#>+-])(?=\s|$)", r"\1\\\2", ln)
+            ln = re.sub(r"^(\s*\d+)([.)])(?=\s)", r"\1\\\2", ln)
+            lines.append(ln)
+        return "\n".join(lines)
+
+    def block(self, k, st):
+        t = k.tag
+        css = _style(k)
+        cls = (k.attrs.get("class") or "").lower()
+        if t in ("p", "div") and "mso-list" in css:
+            m = re.search(r"level(\d+)", css["mso-list"])
+            level = int(m.group(1)) if m else 1
+            marker = ""
+            for d in self._descend(k):
+                if not isinstance(d, str) and "ignore" in _style(d).get("mso-list", ""):
+                    marker = re.sub(r"\s+", "", "".join(x for x in self._texts(d))).replace("\xa0", "")
+                    break
+            mm = re.match(r"^(\d+)[.)]", marker)
+            ordered = bool(mm) or bool(re.match(r"^[a-zA-Z]{1,3}[.)]$", marker))
+            mark = (mm.group(1) + "." if mm else "1.") if ordered else "-"
+            txt = self.inline(k, _run_style(k, st)).strip()
+            box = ""
+            if txt[:1] in "☐☑☒":
+                box, txt = ("[ ] " if txt[0] == "☐" else "[x] "), txt[1:].lstrip()
+            lid = re.match(r"\s*(l\d+)", css["mso-list"])
+            return [("li:" + (lid.group(1) if lid else "w") + ("o" if ordered else "u"), "    " * (level - 1) + mark + " " + box + txt.replace("\n", "\n" + "    " * level))]
+        if re.fullmatch(r"h[1-6]", t) or "msotitle" in cls or "msosubtitle" in cls:
+            lv = int(t[1]) if t[0] == "h" and t[1:].isdigit() else (1 if "msotitle" in cls else 2)
+            self.in_heading = True
+            txt = self.inline(k, st).replace("\n", " ").strip()
+            self.in_heading = False
+            return [("p", "#" * lv + " " + txt)] if txt else []
+        if t in ("ul", "ol"):
+            return self.list_(k, st, 0)
+        if t == "li":
+            return self.list_(_wrap_node("ul", k), st, 0)
+        if t == "blockquote" or "msoquote" in cls or "msointensequote" in cls:
+            inner = self.join(self.blocks(k, st)) if t == "blockquote" else self.inline(k, st).strip()
+            return [("p", "\n".join(("> " + ln) if ln else ">" for ln in inner.split("\n")))] if inner.strip() else []
+        if t == "pre":
+            code = "".join(self._texts(k, br="\n")).strip("\n")
+            fence = "````" if "```" in code else "```"
+            return [("p", fence + "\n" + code + "\n" + fence)]
+        if t == "hr":
+            return [("p", "---")]
+        if t == "table":
+            return self.table(k, st)
+        if t in ("tr", "td", "th", "thead", "tbody", "tfoot"):
+            return self.table(_wrap_node("table", k), st)
+        if t in ("p", "div", "center", "dt", "dd", "figcaption", "summary", "caption", "address") and not self.has_block(k):
+            txt = self.inline(k, _run_style(k, st)).strip("\n ")
+            if txt.strip():
+                return [("p", self.guard(txt))]
+            return []
+        if self._is_code_box(k):                        # un editor de codigo (VS Code...): texto tal cual
+            code = "".join(self._texts(k, br="\n")).strip("\n")
+            return [("p", "```\n" + code + "\n```")] if code.strip() else []
+        return self.blocks(k, _run_style(k, st))
+
+    def _is_code_box(self, k):
+        css = _style(k)
+        return "pre" in css.get("white-space", "") and any(x in css.get("font-family", "") for x in ("consolas", "monospace", "courier", "menlo", "mono"))
+
+    def _descend(self, n):
+        for k in n.kids:
+            yield k
+            if not isinstance(k, str):
+                yield from self._descend(k)
+
+    def _texts(self, n, br=""):
+        for k in n.kids:
+            if isinstance(k, str):
+                yield k
+            elif k.tag == "br":
+                yield br
+            elif k.tag in ("div", "p", "tr", "li") and br:
+                yield from self._texts(k, br)
+                yield br
+            else:
+                yield from self._texts(k, br)
+
+    def list_(self, k, st, depth, key=None):
+        ordered = k.tag == "ol"
+        key = key or "li:%d" % id(k)
+        try:
+            num = int(k.attrs.get("start", "1"))
+        except ValueError:
+            num = 1
+        out = []
+        for li in k.kids:
+            if isinstance(li, str):
+                continue
+            if li.tag in ("ul", "ol"):                   # lista dentro de lista sin <li> (algunos editores)
+                out += self.list_(li, st, depth + 1, key)
+                continue
+            if li.tag != "li":
+                continue
+            mark = ("%d." % num) if ordered else "-"
+            num += 1
+            pad = "    " * depth
+            head = _Node("#p")
+            rest = []
+            for c in li.kids:
+                if not isinstance(c, str) and c.tag in ("ul", "ol"):
+                    rest.append(c)
+                elif rest:
+                    rest.append(c)
+                else:
+                    head.kids.append(c)
+            first = self.join(self.blocks(head, st)) if self.has_block(head) else self.inline(head, st).strip()
+            box = ""
+            if first[:1] in "☐☑☒":
+                box, first = ("[ ] " if first[0] == "☐" else "[x] "), first[1:].lstrip()
+            if first.startswith(("[ ] ", "[x] ")):
+                box, first = first[:4], first[4:]
+            first = first.replace("\n\n", "\n").replace("\n", "\n" + pad + "    ")
+            out.append((key, pad + mark + " " + box + first))
+            for c in rest:
+                if not isinstance(c, str) and c.tag in ("ul", "ol"):
+                    out += self.list_(c, st, depth + 1, key)
+                else:
+                    tmp = _Node("#p")
+                    tmp.kids = [c]
+                    txt = self.join(self.blocks(tmp, st))
+                    if txt.strip():
+                        out.append((key, "\n".join(pad + "    " + ln for ln in txt.split("\n"))))
+        return out
+
+    def table(self, k, st):
+        rows = []
+
+        def walk(n):
+            for c in n.kids:
+                if isinstance(c, str):
+                    continue
+                if c.tag == "tr":
+                    rows.append([x for x in c.kids if not isinstance(x, str) and x.tag in ("td", "th")])
+                elif c.tag in ("thead", "tbody", "tfoot"):
+                    walk(c)
+                elif c.tag in ("td", "th"):
+                    rows.append([x for x in n.kids if not isinstance(x, str) and x.tag in ("td", "th")])
+                    return
+        walk(k)
+        if not rows:
+            return self.blocks(k, st)
+        cells = []
+        for r in rows:
+            line = []
+            for c in r:
+                txt = self.join(self.blocks(c, st)) if self.has_block(c) else self.inline(c, st).strip()
+                txt = re.sub(r"\n+", "<br>", txt.strip()).replace("|", "\\|")
+                line.append(txt)
+            cells.append(line)
+        width = max(len(r) for r in cells)
+        if width == 1 and len(cells) == 1:
+            return [("p", cells[0][0].replace("<br>", "\n"))] if cells[0][0] else []
+        cells = [r + [""] * (width - len(r)) for r in cells]
+        md = ["| " + " | ".join(cells[0]) + " |", "|" + "|".join(["---"] * width) + "|"]
+        md += ["| " + " | ".join(r) + " |" for r in cells[1:]]
+        return [("p", "\n".join(md))]
+
+    @staticmethod
+    def join(blocks):
+        out = ""
+        prev = None
+        for kind, txt in blocks:
+            if out:
+                out += "\n" if (kind.startswith("li") and kind == prev) else "\n\n"
+            out += txt
+            prev = kind
+        return out
+
+
+def _wrap_node(tag, child):
+    n = _Node(tag)
+    n.kids = [child]
+    return n
+
+
+def html_to_md(src):
+    """HTML (lo que dejan en el portapapeles Word, Writer, Google Docs, un navegador...) -> Markdown."""
+    root = _parse_html(src)
+    conv = _Md()
+    md = conv.join(conv.blocks(root))
+    md = re.sub(r"\n{3,}", "\n\n", md).strip("\n")
+    return md
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1577,6 +2135,13 @@ class App:
             self.view.bind(seq, lambda e: self.copy_rich_view())
         if sys.platform == "darwin":
             self.view.bind("<Command-c>", lambda e: self.copy_rich_view())
+        self.editor.bind("<<Paste>>", lambda e: self.paste_rich())                 # pegar de Word/Writer/web: a Markdown
+        self.view.bind("<<Paste>>", lambda e: self.paste_rich(from_view=True))
+        for w in (self.editor, self.view):
+            w.bind("<Control-V>", lambda e, v=w is self.view: self.paste_plain(from_view=v))   # Ctrl+Mayus+V: sin formato
+            if sys.platform == "darwin":
+                w.bind("<Command-V>", lambda e, v=w is self.view: self.paste_plain(from_view=v))
+        self.view.bind("<Control-v>", lambda e: self.paste_rich(from_view=True))
         for seq in ("<Control-z>", "<Control-Z>", "<Control-y>"):      # deshacer tambien desde el lector (p.ej. una casilla)
             self.view.bind(seq, lambda e, s=seq: (self._undo_from_view(redo=s != "<Control-z>"), "break")[1])
         self.renderer = Renderer(self, self.view)
@@ -2237,10 +2802,13 @@ class App:
             m.add_command(label="Cortar", accelerator="Ctrl+X", command=lambda: w.event_generate("<<Cut>>"))
             m.add_command(label="Copiar (Markdown)", accelerator="Ctrl+C", command=lambda: w.event_generate("<<Copy>>"))
             m.add_command(label="Copiar con formato (para Word…)", command=self.copy_rich_editor)
-            m.add_command(label="Pegar", accelerator="Ctrl+V", command=lambda: w.event_generate("<<Paste>>"))
+            m.add_command(label="Pegar", accelerator="Ctrl+V", command=self.paste_rich)
+            m.add_command(label="Pegar sin formato", accelerator="Ctrl+Mayús+V", command=self.paste_plain)
         else:
             m.add_command(label="Copiar con formato", accelerator="Ctrl+C", command=self.copy_rich_view)
             m.add_command(label="Copiar sin formato", command=self.copy_plain_view)
+            m.add_command(label="Pegar aquí", accelerator="Ctrl+V", command=lambda: self.paste_rich(from_view=True, at=(e.x, e.y)))
+            m.add_command(label="Pegar sin formato", accelerator="Ctrl+Mayús+V", command=lambda: self.paste_plain(from_view=True, at=(e.x, e.y)))
         m.add_separator()
         m.add_command(label="Guía de formatos", accelerator="F1", command=self.show_guide)
         try:
@@ -2282,6 +2850,63 @@ class App:
             # para lineas: las que ocupa lo seleccionado en el Markdown
             l2 = max(l1, l2)
         return ok_inline, l1, l2
+
+    def paste_rich(self, from_view=False, at=None):
+        """Pegar: si lo copiado trae formato (Word, Writer, Google Docs, una web...), entra como Markdown."""
+        html = get_clipboard_html(self.root)
+        md = None
+        if html:
+            try:
+                md = html_to_md(html)
+            except Exception:
+                md = None
+        if not md:
+            return self.paste_plain(from_view, at)
+        self._insert_pasted(md, from_view, at)
+        self.flash("Pegado como Markdown (sin formato: Ctrl+Mayús+V)")
+        return "break"
+
+    def paste_plain(self, from_view=False, at=None):
+        try:
+            txt = self.root.clipboard_get()
+        except tk.TclError:
+            return "break"
+        self._insert_pasted(txt, from_view, at)
+        return "break"
+
+    def _insert_pasted(self, txt, from_view, at=None):
+        ed = self.editor
+        ed.configure(autoseparators=False)                 # pegar = un solo paso de Ctrl+Z
+        try:
+            ed.edit_separator()
+            if from_view:
+                # en el lector: detras del bloque donde esta el cursor (o el raton), como parrafo aparte
+                v = self.view
+                try:
+                    idx = v.index("@%d,%d" % at) if at else v.index("sel.last")
+                except tk.TclError:
+                    idx = v.index("insert")
+                line = self.renderer.line_at(idx) + 1
+                last = int(ed.index("end-1c").split(".")[0])
+                while line < last and ed.get("%d.0" % (line + 1), "%d.end" % (line + 1)).strip():
+                    line += 1
+                if not ed.get("1.0", "end-1c").strip():
+                    ed.insert("1.0", txt.rstrip("\n") + "\n")
+                else:
+                    ed.insert("%d.end" % line, "\n\n" + txt.strip("\n"))
+            else:
+                try:
+                    ed.delete("sel.first", "sel.last")
+                except tk.TclError:
+                    pass
+                ed.insert("insert", txt)
+                ed.see("insert")
+            ed.edit_separator()
+        finally:
+            ed.configure(autoseparators=True)
+        self.render_now()
+        self.highlight()
+        self._update_title()
 
     def copy_rich_view(self):
         """Ctrl+C en el lector: lo seleccionado, con su formato (y como texto normal para donde no hay formato)."""

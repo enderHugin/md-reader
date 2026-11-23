@@ -91,6 +91,8 @@ jobs:
             pbpaste -Prefer rtf | tee /tmp/clip.rtf | head -c 400; echo
             grep -q '{\\rtf' /tmp/clip.rtf && grep -q 'negrita' /tmp/clip.rtf && grep -q '\\b' /tmp/clip.rtf
           fi
+          # y al reves: pegar lo que hay en el portapapeles (con formato) como Markdown
+          "$PY" -c "import sys, tkinter as tk; sys.path.insert(0, sys.argv[1]); import md_reader as m; r = tk.Tk(); r.withdraw(); h = m.get_clipboard_html(r); print(repr((h or '')[:300])); md = m.html_to_md(h or ''); print(md); sys.exit(0 if '**negrita**' in md and 'Hola' in md else 1)" "$P"
       - name: Registro (si algo falla)
         if: failure()
         shell: bash
@@ -159,6 +161,8 @@ jobs:
             pbpaste -Prefer rtf | tee /tmp/clip.rtf | head -c 400; echo
             grep -q '{\\rtf' /tmp/clip.rtf && grep -q 'negrita' /tmp/clip.rtf && grep -q '\\b' /tmp/clip.rtf
           fi
+          # y al reves: pegar lo que hay en el portapapeles (con formato) como Markdown
+          "$PY" -c "import sys, tkinter as tk; sys.path.insert(0, sys.argv[1]); import md_reader as m; r = tk.Tk(); r.withdraw(); h = m.get_clipboard_html(r); print(repr((h or '')[:300])); md = m.html_to_md(h or ''); print(md); sys.exit(0 if '**negrita**' in md and 'Hola' in md else 1)" "$P"
       - name: Registro (si algo falla)
         if: failure()
         shell: bash

@@ -1,6 +1,11 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.6 — 2026-11-23
+- **Pegar desde Word, Writer, Google Docs o una web.** `Ctrl+V` convierte lo copiado en Markdown: títulos, negrita, cursiva, subrayado, tachado, colores, resaltado, listas (también las de Word, con sus niveles), casillas, tablas, citas, código y enlaces. Funciona en el editor y también en el lector (lo pegado va detrás del párrafo donde estás).
+- `Ctrl+Shift+V` pega solo el texto, sin convertir.
+- Copiar con formato y volver a pegar deja el mismo Markdown.
+
 ## 0.1.5 — 2026-11-23
 - **HTML dentro del Markdown.** `<span style="color:red">`, `<del>`, `<u>`, `<mark>`, `<sub>`, `<sup>`, `<br>`, `<div align="center">`… ya se ven con su formato en lugar de las etiquetas. Los comentarios `<!-- -->` no se muestran. Nada se ejecuta (ni scripts ni estilos de página).
 - Copiar con formato conserva los colores, el subrayado y el centrado.
