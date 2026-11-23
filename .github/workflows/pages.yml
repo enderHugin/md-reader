@@ -90,7 +90,7 @@ jobs:
           else P="$HOME/Library/Application Support/md-reader/app"; PY="$P/.venv/bin/python"; fi
           "$PY" -c "import sys, tkinter as tk; sys.path.insert(0, sys.argv[1]); import md_reader as m; r = tk.Tk(); r.withdraw(); ok = m.set_rich_clipboard(r, '<h2>Hola</h2><p><b>negrita</b> y <i>cursiva</i></p>', 'Hola negrita y cursiva'); r.update(); print('con formato:', ok); sys.exit(0 if ok else 1)" "$P"
           if [ "$RUNNER_OS" = Windows ]; then
-            powershell -NoProfile -Command "\$h = Get-Clipboard -TextFormatType Html; \$h; if (\$h -notmatch '<b>negrita</b>') { exit 1 }; if ((Get-Clipboard) -ne 'Hola negrita y cursiva') { exit 1 }"
+            powershell -NoProfile -Command "\$h = (Get-Clipboard -TextFormatType Html) -join [char]10; \$h; if (\$h -notmatch '<b>negrita</b>') { exit 1 }; \$t = (Get-Clipboard) -join [char]10; 'texto: ' + \$t; if (\$t.Trim() -ne 'Hola negrita y cursiva') { exit 1 }"
           else
             pbpaste -Prefer rtf | tee /tmp/clip.rtf | head -c 400; echo
             grep -q '{\\rtf' /tmp/clip.rtf && grep -q 'negrita' /tmp/clip.rtf && grep -q '\\b' /tmp/clip.rtf
