@@ -1,6 +1,10 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.10 — 2026-11-24
+- **Actualizador común de py-installer 1.3.0**, el mismo que cam-ui y widget-arena: misma ventana de Actualizaciones (con novedades, «volver a la versión anterior» y, abajo, la versión del actualizador), mismo «avisar al abrir», «actualizar sin preguntar» y «vigilar sola», y el mismo atajo secreto **Ctrl+Shift+Alt+F12** desde cualquier ventana.
+- Nunca se reinicia para actualizarse con cambios sin guardar: espera a que guardes.
+
 ## 0.1.9 — 2026-11-24
 - El atajo secreto de las actualizaciones, **Ctrl+Shift+Alt+F12** (con o sin la tecla Win), funciona desde la ventana principal: abre «Actualizaciones» con la casilla «Vigilar sola, sin avisos» ya visible. Antes solo valía con esa ventana delante.
 

@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.9"
+APP_VERSION = "0.1.10"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -3211,8 +3211,12 @@ class App:
         self.updates = None
         try:
             import pyi_update
-            self.updates = pyi_update.tk_install(self.root, pyi_update.Updater(__file__, version=APP_VERSION), APP_NAME,
-                                                 on_close=self.quit, busy=self.dirty)
+            U = pyi_update.Updater(__file__, version=APP_VERSION)
+            try:      # notify: avisos breves en la barra de estado (actualizador de py-installer 1.3 en adelante)
+                self.updates = pyi_update.tk_install(self.root, U, APP_NAME, on_close=self.quit, busy=self.dirty,
+                                                     notify=self.flash)
+            except TypeError:
+                self.updates = pyi_update.tk_install(self.root, U, APP_NAME, on_close=self.quit, busy=self.dirty)
         except ImportError:
             pass
 
