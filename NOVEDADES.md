@@ -1,6 +1,9 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.1.9 — 2026-11-24
+- El atajo secreto de las actualizaciones, **Ctrl+Shift+Alt+F12** (con o sin la tecla Win), funciona desde la ventana principal: abre «Actualizaciones» con la casilla «Vigilar sola, sin avisos» ya visible. Antes solo valía con esa ventana delante.
+
 ## 0.1.8 — 2026-11-23
 - En el lector, el **doble clic ya no cambia al editor**: selecciona la palabra, como en cualquier lector. Para editar en ese sitio, `Ctrl+E`.
 

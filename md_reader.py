@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.8"
+APP_VERSION = "0.1.9"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
