@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -310,6 +310,13 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 - **Colocación**, igual para todas las intervenciones: **en columnas** (tiempo, nombre y texto alineados, con los nombres a la izquierda o a la derecha y el texto con sangría francesa) o todo seguido; formato del tiempo, salto de línea después del tiempo, sangría, separador después del nombre (`: `, ` — `…) y margen.
 - Cambiar una cosa cambia todas las intervenciones a la vez. Lo que hayas corregido a mano en el texto se conserva.
 - **Cambiar nombre…** renombra a un hablante en toda la transcripción.
+
+**Temas**: guardan la colocación y todos los estilos para usarlos en otras transcripciones.
+
+- **Guardar como tema…** guarda los de la transcripción abierta; **Aplicar este tema** los pone en ella.
+- Lo que es por hablante va por su nombre: si «JUEZA» era morada, en la próxima transcripción también. Los hablantes que no estén en el tema reciben, por orden, los estilos que sobren.
+- **Exportar…** e **Importar…** pasan un tema a un archivo `.mdtema` y al revés, por ejemplo para dárselo a otra persona.
+- **Usarlo al importar subtítulos** lo deja elegido por defecto en *Importar subtítulos*, donde también se puede elegir otro.
 
 ## Copiar y pegar con Word, Writer…
 
@@ -1555,6 +1562,89 @@ def transcript_apply(src, cfg):
     return "\n".join(out)
 
 
+THEME_EXT = ".mdtema"
+
+
+def themes_dir():
+    return os.path.join(config_dir(), "temas")
+
+
+def list_themes():
+    try:
+        return sorted((f[:-len(THEME_EXT)] for f in os.listdir(themes_dir()) if f.endswith(THEME_EXT)), key=str.lower)
+    except OSError:
+        return []
+
+
+def theme_path(name):
+    safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "tema"
+    return os.path.join(themes_dir(), safe + THEME_EXT)
+
+
+def theme_from_cfg(cfg, name):
+    """Tema = colocacion + estilos. Lo que es por hablante se guarda por su nombre (y en orden), para poder
+    usarlo en otras transcripciones."""
+    import copy
+    st = copy.deepcopy(cfg["style"])
+    names = list(cfg["speakers"])
+    for e in st:
+        for p in st[e].values():
+            p["per"] = {names[int(k) - 1]: v for k, v in (p.get("per") or {}).items()
+                        if k.isdigit() and 0 < int(k) <= len(names)}
+    return {"md-reader-tema": 1, "name": name, "order": names, "layout": copy.deepcopy(cfg["layout"]), "style": st}
+
+
+def theme_apply(cfg, theme):
+    """Aplica un tema a una transcripcion: el estilo por hablante va por nombre (sin distinguir mayusculas); los
+    hablantes que no estan en el tema reciben, por orden, los del tema que no se han usado; si tampoco, el comun."""
+    import copy
+    new = copy.deepcopy(cfg)
+    new["layout"].update(copy.deepcopy(theme.get("layout") or {}))
+    order = [str(x) for x in theme.get("order") or []]
+    have = {n.casefold() for n in new["speakers"]}
+    spare = [x for x in order if x.casefold() not in have]      # los del tema que no estan en esta transcripcion
+    alias, k = {}, 0
+    for name in new["speakers"]:
+        if name.casefold() not in {x.casefold() for x in order} and k < len(spare):
+            alias[name] = spare[k]
+            k += 1
+    for e, props in (theme.get("style") or {}).items():
+        if e not in new["style"]:
+            continue
+        for prop, tp in props.items():
+            if prop not in new["style"][e]:
+                continue
+            dst = new["style"][e][prop]
+            dst["each"] = bool(tp.get("each"))
+            dst["all"] = tp.get("all", dst.get("all"))
+            per_t = {str(k).casefold(): v for k, v in (tp.get("per") or {}).items()}
+            per = {}
+            for i, name in enumerate(new["speakers"], 1):
+                v = per_t.get(name.casefold())
+                if v is None and name in alias:
+                    v = per_t.get(alias[name].casefold())
+                if v is None and prop == "color" and dst["each"]:
+                    v = SPEAKER_COLORS[(i - 1) % len(SPEAKER_COLORS)]
+                if v is not None:
+                    per[str(i)] = v
+            dst["per"] = per
+    return new
+
+
+def load_theme(path):
+    with open(path, encoding="utf-8") as f:
+        th = json.load(f)
+    if not isinstance(th, dict) or "style" not in th or "layout" not in th:
+        raise ValueError("no es un tema de transcripción de md-reader")
+    return th
+
+
+def save_theme(theme, path):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(theme, f, ensure_ascii=False, indent=1)
+
+
 def transcript_speaker_at(src, line_no):
     """Numero de hablante de la intervencion en esa linea del Markdown (1...), o None."""
     lines = (src or "").split("\n")
@@ -2376,6 +2466,8 @@ class ImportSubtitlesDialog:
         self.v_gap = tk.StringVar(value="3")
         self.v_carry = tk.BooleanVar(value=True)
         self.v_margin = tk.StringVar(value="0")
+        self.DEF = "(el de siempre)"
+        self.v_theme = tk.StringVar(value=app.cfg.get("transcript_theme") if app.cfg.get("transcript_theme") in list_themes() else self.DEF)
         row = ttk.Frame(f)
         row.pack(anchor="w")
         ttk.Checkbutton(row, text="Juntar en un párrafo lo que dice seguido una misma persona, si hay menos de",
@@ -2388,6 +2480,12 @@ class ImportSubtitlesDialog:
         ttk.Label(row, text="Margen a la izquierda de cada intervención:").pack(side="left")
         ttk.Spinbox(row, from_=0, to=10, width=4, textvariable=self.v_margin).pack(side="left", padx=4)
         ttk.Label(row, text="(0 = sin margen; luego se puede cambiar)").pack(side="left")
+        row = ttk.Frame(f)
+        row.pack(anchor="w", pady=(8, 0))
+        ttk.Label(row, text="Tema:").pack(side="left")
+        ttk.Combobox(row, textvariable=self.v_theme, values=[self.DEF] + list_themes(), state="readonly",
+                     width=30).pack(side="left", padx=6)
+        ttk.Label(row, text="(si el tema trae margen, manda el suyo)", style="Muted.TLabel").pack(side="left")
         ttk.Label(f, text="Después se abre «Estilo de la transcripción» para elegir colores, fuentes y colocación.",
                   style="Muted.TLabel", wraplength=460, justify="left").pack(anchor="w", pady=(10, 0))
         b = ttk.Frame(f)
@@ -2406,7 +2504,8 @@ class ImportSubtitlesDialog:
             except ValueError:
                 return d
         self.result = {"merge": self.v_merge.get(), "gap": num(self.v_gap.get(), 3.0), "carry": self.v_carry.get(),
-                       "margin": max(0.0, num(self.v_margin.get(), 0.0))}
+                       "margin": max(0.0, num(self.v_margin.get(), 0.0)),
+                       "theme": None if self.v_theme.get() == self.DEF else self.v_theme.get()}
         self.top.destroy()
 
 
@@ -2428,7 +2527,7 @@ class TranscriptStyleDialog:
         top.title("Estilo de la transcripción — md-reader")
         top.configure(bg=c["bg"])
         top.transient(app.root)
-        top.minsize(720, 470)
+        top.minsize(760, 540)
         ed = app.editor
         ed.edit_separator()
         ed.configure(autoseparators=False)          # todo lo del dialogo = un solo Ctrl+Z
@@ -2443,12 +2542,28 @@ class TranscriptStyleDialog:
         left = ttk.Frame(outer)
         left.pack(side="left", fill="y", padx=(0, 12))
         ttk.Label(left, text="Hablantes", style="Head.TLabel").pack(anchor="w")
-        self.lb = tk.Listbox(left, width=22, height=14, exportselection=False, activestyle="none",
+        self.lb = tk.Listbox(left, width=22, height=8, exportselection=False, activestyle="none",
                              bg=c["doc_bg"], fg=c["doc_fg"], selectbackground=c["acc"], selectforeground="white",
                              relief="flat", highlightthickness=1, highlightbackground=c["line"])
         self.lb.pack(fill="y", expand=True, pady=(4, 6))
         self.lb.bind("<<ListboxSelect>>", lambda e: self._pick())
         ttk.Button(left, text="Cambiar nombre…", command=self.rename).pack(fill="x")
+        ttk.Separator(left).pack(fill="x", pady=10)
+        ttk.Label(left, text="Temas", style="Head.TLabel").pack(anchor="w")
+        self.v_theme = tk.StringVar()
+        self.cb_theme = ttk.Combobox(left, textvariable=self.v_theme, state="readonly", width=20)
+        self.cb_theme.pack(fill="x", pady=(4, 4))
+        self.cb_theme.bind("<<ComboboxSelected>>", lambda e: self._theme_default_var())
+        ttk.Button(left, text="Aplicar este tema", command=self.theme_use).pack(fill="x")
+        ttk.Button(left, text="Guardar como tema…", command=self.theme_save).pack(fill="x", pady=(4, 0))
+        row = ttk.Frame(left)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Button(row, text="Importar…", command=self.theme_import).pack(side="left", fill="x", expand=True)
+        ttk.Button(row, text="Exportar…", command=self.theme_export).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self.v_theme_def = tk.BooleanVar()
+        ttk.Checkbutton(left, text="Usarlo al importar subtítulos", variable=self.v_theme_def,
+                        command=self.theme_default).pack(anchor="w", pady=(6, 0))
+        self._themes_fill()
         # pestanas
         right = ttk.Frame(outer)
         right.pack(side="left", fill="both", expand=True)
@@ -2560,6 +2675,93 @@ class TranscriptStyleDialog:
             self._fill_speakers()
             self._load()
             self.apply()
+
+    # ---- temas ----
+    def _themes_fill(self, select=None):
+        names = list_themes()
+        self.cb_theme.configure(values=names)
+        cur = select or self.v_theme.get() or self.app.cfg.get("transcript_theme")
+        self.v_theme.set(cur if cur in names else (names[0] if names else ""))
+        self._theme_default_var()
+
+    def _theme_default_var(self):
+        self.v_theme_def.set(bool(self.v_theme.get()) and self.app.cfg.get("transcript_theme") == self.v_theme.get())
+
+    def theme_default(self):
+        name = self.v_theme.get()
+        if not name:
+            self.v_theme_def.set(False)
+            return
+        self.app.cfg["transcript_theme"] = name if self.v_theme_def.get() else None
+        self.app.save_cfg()
+
+    def _use(self, th):
+        self.cfg = theme_apply(self.cfg, th)
+        lay = self.cfg["layout"]
+        self.L["time_fmt"].set(lay.get("time_fmt", "[hh:mm:ss]"))
+        self.L["time_break"].set(bool(lay.get("time_break")))
+        self.L["indent"].set(str(lay.get("indent", 0)))
+        self.L["sep"].set(lay.get("sep", ": "))
+        self.L["sep_break"].set(bool(lay.get("sep_break")))
+        self.L["margin"].set("%g" % (lay.get("margin") or 0))
+        self.L["columns"].set(dict(COLUMN_CHOICES).get(lay.get("columns") or "", COLUMN_CHOICES[0][1]))
+        self._fill_speakers()
+        self._load()
+        self.apply()
+
+    def theme_use(self):
+        name = self.v_theme.get()
+        if not name:
+            messagebox.showinfo("Temas", "Todavía no hay temas guardados.\n\nUsa «Guardar como tema…» o «Importar…».", parent=self.top)
+            return
+        try:
+            self._use(load_theme(theme_path(name)))
+        except Exception as e:
+            messagebox.showwarning("Temas", "No se pudo usar el tema «%s»:\n%s" % (name, e), parent=self.top)
+
+    def theme_save(self):
+        from tkinter import simpledialog
+        name = simpledialog.askstring("Guardar como tema", "Nombre del tema (colocación y estilos de esta transcripción):",
+                                      initialvalue=self.v_theme.get() or "", parent=self.top)
+        if not name or not name.strip():
+            return
+        name = name.strip()
+        p = theme_path(name)
+        if os.path.exists(p) and not messagebox.askyesno("Temas", "Ya hay un tema «%s». ¿Sustituirlo?" % name, parent=self.top):
+            return
+        save_theme(theme_from_cfg(self.cfg, name), p)
+        self._themes_fill(select=os.path.basename(p)[:-len(THEME_EXT)])
+        self.app.flash("Tema «%s» guardado" % name)
+
+    def theme_import(self):
+        p = filedialog.askopenfilename(parent=self.top, title="Importar tema",
+                                       filetypes=[("Tema de transcripción", "*" + THEME_EXT), ("Todos", "*.*")])
+        if not p:
+            return
+        try:
+            th = load_theme(p)
+        except Exception as e:
+            messagebox.showwarning("Temas", "Ese archivo no es un tema de md-reader:\n%s" % e, parent=self.top)
+            return
+        name = (th.get("name") or os.path.splitext(os.path.basename(p))[0]).strip()
+        dst = theme_path(name)
+        if os.path.abspath(dst) != os.path.abspath(p):
+            if os.path.exists(dst) and not messagebox.askyesno("Temas", "Ya hay un tema «%s». ¿Sustituirlo por el importado?" % name, parent=self.top):
+                return
+            save_theme(th, dst)
+        self._themes_fill(select=os.path.basename(dst)[:-len(THEME_EXT)])
+        self._use(th)
+        self.app.flash("Tema «%s» importado y aplicado" % name)
+
+    def theme_export(self):
+        name = self.v_theme.get() or "mi tema"
+        p = filedialog.asksaveasfilename(parent=self.top, title="Exportar tema", initialfile=name + THEME_EXT,
+                                         defaultextension=THEME_EXT,
+                                         filetypes=[("Tema de transcripción", "*" + THEME_EXT), ("Todos", "*.*")])
+        if not p:
+            return
+        save_theme(theme_from_cfg(self.cfg, os.path.splitext(os.path.basename(p))[0]), p)
+        self.app.flash("Tema exportado: %s" % os.path.basename(p))
 
     # ---- valores ----
     def _load(self):
@@ -3303,7 +3505,12 @@ class App:
         md, tcfg = build_transcript(groups, title)
         if opt["margin"]:
             tcfg["layout"]["margin"] = opt["margin"]
-            md = transcript_apply(md, tcfg)
+        if opt.get("theme"):
+            try:
+                tcfg = theme_apply(tcfg, load_theme(theme_path(opt["theme"])))
+            except Exception as e:
+                messagebox.showwarning(APP_NAME, "No se pudo usar el tema «%s»:\n%s" % (opt["theme"], e), parent=self.root)
+        md = transcript_apply(md, tcfg)
         self.show_text(md, None)
         self.suggest_name = title + ".md"
         self.cfg["last_dir"] = os.path.dirname(p)

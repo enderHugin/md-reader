@@ -399,6 +399,34 @@ pump(root, 50)
 ok("[00:10" not in V.get("1.0", "end"), "el tiempo se puede ocultar")
 hh, _ = md_reader.html_from_view(V, "1.0", "end", app.renderer.links)
 ok("color:#2471a3" in hh and "[00:10" not in hh, "copiar la transcripción con formato")
+# temas: guardar, aplicar a otra transcripcion (por nombre o por posicion), exportar e importar
+import tempfile as _tf
+from tkinter import simpledialog as _sd, filedialog as _fd
+_tdir = _tf.mkdtemp()
+md_reader.config_dir = lambda: _tdir
+td.n = 1; td._load()
+td._set("h", "color", "#123456")                         # HABLANTE (n=1) en otro color
+td.w[("x", "size")]["var"].set("120"); td._changed("x", "size")
+_sd.askstring = lambda *a, **k: "Juicio"
+td.theme_save()
+ok(md_reader.list_themes() == ["Juicio"], "guardar como tema")
+other = md_reader.transcript_default_cfg(["OTRA", "HABLANTE"])
+got = md_reader.theme_apply(other, md_reader.load_theme(md_reader.theme_path("Juicio")))
+ok(md_reader.style_value(got, "h", "color", 2) == "#123456", "tema: el estilo por hablante va por su nombre")
+ok(md_reader.style_value(got, "h", "color", 1) == "#2471a3" and got["style"]["x"]["size"]["all"] == 120,
+   "tema: los que no están reciben por orden los estilos que sobran; y lo común para todos")
+_exp = os.path.join(_tdir, "fuera", "exportado" + md_reader.THEME_EXT)
+os.makedirs(os.path.dirname(_exp))
+_fd.asksaveasfilename = lambda *a, **k: _exp
+td.theme_export()
+ok(md_reader.load_theme(_exp)["style"]["h"]["color"]["per"].get("HABLANTE") == "#123456", "exportar tema a un archivo")
+os.remove(md_reader.theme_path("Juicio"))
+_fd.askopenfilename = lambda *a, **k: _exp
+td.theme_import()
+ok("exportado" in md_reader.list_themes(), "importar tema desde un archivo")
+td.v_theme_def.set(True); td.theme_default()
+ok(app.cfg.get("transcript_theme") == "exportado", "tema por defecto al importar subtítulos")
+app.cfg["transcript_theme"] = None
 td.close()
 app.editor.edit_undo()
 pump(root, 50)

@@ -1,6 +1,10 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.2.2 — 2026-11-26
+- **Temas de transcripción**: guarda la colocación y los estilos de una transcripción como tema y úsalo en otras, o elígelo al importar subtítulos (y déjalo por defecto). Lo que es por hablante va por su nombre: si «JUEZA» era morada, en la próxima también.
+- **Exportar e importar temas** como archivos `.mdtema`, para guardarlos o pasárselos a otra persona.
+
 ## 0.2.1 — 2026-11-26
 - **Transcripciones en columnas**: el tiempo, el nombre y lo que dice, alineados. Los nombres pueden ir a la izquierda o a la derecha (con los «:» alineados), y el texto lleva sangría francesa: las líneas siguientes empiezan bajo el texto, no bajo el tiempo. La columna de los nombres se ajusta al más largo. Está en *Estilo de la transcripción → Colocación*, y es la colocación de las transcripciones nuevas.
 - Al copiar con formato, una transcripción en columnas va a Word y Writer como una tabla sin bordes, para que las columnas se mantengan.
