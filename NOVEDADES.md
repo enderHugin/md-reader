@@ -1,6 +1,11 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.2.0 — 2026-11-26
+- **Transcripciones desde subtítulos.** *Más → Importar subtítulos* lee `.srt`, `.vtt` o texto con `[hh:mm:ss] HABLANTE texto`, reconoce a los hablantes y puede juntar lo que alguien dice seguido y dejar margen.
+- **Estilo de la transcripción**: tiempo, hablante y texto con su color, resaltado, fuente, tamaño, negrita, cursiva, subrayado y mayúsculas; cada opción **para todos o por hablante**. La colocación (salto tras el tiempo, sangría, separador, margen) es la misma para todas las intervenciones. Un cambio se ve al momento en toda la transcripción y se deshace con un solo Ctrl+Z.
+- El lector entiende un bloque `<style>` con clases dentro del documento (color, fuente, tamaño, margen, ocultar, mayúsculas), y copiar con formato lleva también fuentes, tamaños y márgenes.
+
 ## 0.1.10 — 2026-11-24
 - **Actualizador común de py-installer 1.3.0**, el mismo que cam-ui y widget-arena: misma ventana de Actualizaciones (con novedades, «volver a la versión anterior» y, abajo, la versión del actualizador), mismo «avisar al abrir», «actualizar sin preguntar» y «vigilar sola», y el mismo atajo secreto **Ctrl+Shift+Alt+F12** desde cualquier ventana.
 - Nunca se reinicia para actualizarse con cambios sin guardar: espera a que guardes.

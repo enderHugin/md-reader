@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.10"
+APP_VERSION = "0.2.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -296,6 +296,21 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 
 <div align="center">centrado</div>
 
+## Transcripciones (subtítulos)
+
+**Más → Importar subtítulos** convierte un `.srt`, un `.vtt` o un texto con líneas como `[00:10:01] ANA texto` en una transcripción: una intervención por párrafo, con el tiempo, quién habla y lo que dice.
+
+- Reconoce a los hablantes escritos como `ANA: …`, `[Ana] …`, `<v Ana>` o en MAYÚSCULAS al principio.
+- Puede juntar en un párrafo lo que alguien dice seguido, y dejar margen a la izquierda.
+
+**Más → Estilo de la transcripción** (o el botón derecho sobre una intervención) abre el diálogo de estilos:
+
+- **Tiempo, Hablante y Texto**: mostrar u ocultar, color, resaltado, fuente, tamaño, negrita, cursiva, subrayado y mayúsculas.
+- Cada opción vale **para todos** o, marcando **por hablante**, solo para el que elijas a la izquierda. Por ejemplo: el tiempo pequeño y gris para todos, y un color distinto para cada hablante.
+- **Colocación**, igual para todas las intervenciones: formato del tiempo, salto de línea después del tiempo, sangría, separador después del nombre (`: `, ` — `…) y margen.
+- Cambiar una cosa cambia todas las intervenciones a la vez. Lo que hayas corregido a mano en el texto se conserva.
+- **Cambiar nombre…** renombra a un hablante en toda la transcripción.
+
 ## Copiar y pegar con Word, Writer…
 
 - **Copiar**: en el lector, `Ctrl+C` copia con formato, listo para pegar en Word, Writer o un correo.
@@ -366,6 +381,14 @@ def _inline_html(segs, heading=False, head_cell=False):
             t = "<sub>" + t + "</sub>"
         css = ";".join(("color:#" + x[3:]) if x.startswith("hc_") else ("background-color:#" + x[3:])
                        for x in sorted(tags) if x.startswith(("hc_", "hb_")))
+        fam, rel = FONT_INFO.get(f, (None, 1.0)) if f else (None, 1.0)
+        extra = []
+        if fam:
+            extra.append("font-family:'%s'" % fam.replace("'", ""))
+        if f and abs(rel - 1.0) > 0.01 and not heading and "code" not in tags:
+            extra.append("font-size:%gpt" % round(11 * rel, 1))
+        if extra:
+            css = ";".join([css] + extra if css else extra)
         if css:
             t = '<span style="%s">%s</span>' % (css, t)
         if href:
@@ -410,11 +433,15 @@ def html_from_view(t, a, b, links, decor=(), images=None):
 
     centered = [False]
 
+    margin = [0]
+
     def flush_para():
         if para:
-            out.append(('<p style="text-align:center">%s</p>' if centered[0] else "<p>%s</p>") % "<br>".join(para))
+            css = (["text-align:center"] if centered[0] else []) + (["margin-left:%dpt" % margin[0]] if margin[0] else [])
+            out.append(('<p style="%s">%%s</p>' % ";".join(css) if css else "<p>%s</p>") % "<br>".join(para))
             para.clear()
         centered[0] = False
+        margin[0] = 0
 
     def flush_pre():
         if pre:
@@ -532,6 +559,9 @@ def html_from_view(t, a, b, links, decor=(), images=None):
             continue
         if "center" in tags:
             centered[0] = True
+        lm = [int(x[3:]) for x in tags if x.startswith("lm_") and x[3:].isdigit()]
+        if lm:
+            margin[0] = int(max(lm) * 0.75)            # px de la pantalla -> pt
         para.append(_inline_html(segs))
     flush_all(); flush_table(); close_lists()
     return "\n".join(out), plain
@@ -1184,6 +1214,307 @@ def html_to_md(src):
     return md
 
 
+
+
+# ---------------------------------------------------------------------------------------------
+# Transcripciones: importar subtitulos (.srt, .vtt o texto con [hh:mm:ss]) y darles estilo.
+#
+# El documento queda en Markdown normal, con:
+#   * un bloque <style> con una regla por elemento (.t tiempo, .h hablante, .x lo que dice) para
+#     todos, y .t1/.h1/.x1... para cada hablante: cambiar una regla cambia todas las intervenciones;
+#   * un comentario oculto con la configuracion (hablantes, colocacion y estilos) que usa el dialogo;
+#   * una linea por intervencion:
+#       <span class="i"><span class="t t1">[00:10:01] </span><span class="h h1">ANA: </span><span class="x x1">texto</span></span>
+#     El texto se puede editar a mano; al cambiar la colocacion se rehacen solo las piezas de alrededor.
+# ---------------------------------------------------------------------------------------------
+TRANSCRIPT_MARK = "md-reader:transcripcion"
+TRANSCRIPT_CFG_RX = re.compile(r"<!--\s*" + re.escape(TRANSCRIPT_MARK) + r"\s*(\{.*?\})\s*-->", re.S)
+TRANSCRIPT_LINE_RX = re.compile(
+    r'^<span class="i"><span class="t t(\d+)">(.*?)</span>((?:&emsp;)*)<span class="h h\1">(.*?)</span>'
+    r'<span class="x x\1">(.*)</span></span>[ \t]*$')
+SPEAKER_COLORS = ["#c0392b", "#2471a3", "#1e8449", "#b9770e", "#7d3c98", "#117a65", "#a04000", "#2e4053",
+                  "#c2185b", "#00838f"]
+TIME_FORMATS = ["[hh:mm:ss]", "hh:mm:ss", "(hh:mm:ss)", "[mm:ss]"]
+STYLE_PROPS = ["show", "color", "bg", "family", "size", "bold", "italic", "under", "upper"]
+STYLE_ELEMS = (("t", "Tiempo"), ("h", "Hablante"), ("x", "Texto"))
+
+_TS = r"(\d{1,2}):(\d{2}):(\d{2})(?:[.,](\d{1,3}))?"
+_CUE_TIME_RX = re.compile(r"^\s*(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})\s*-->\s*(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})", re.M)
+_PLAIN_RX = re.compile(r"^\s*[\[(]?(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.,]\d{1,3})?[\])]?\s+(.*\S)\s*$")
+_NAME_COLON_RX = re.compile(r"^\s*([A-ZÁÉÍÓÚÑÜÀÈÌÒÙÇ][\wÁÉÍÓÚÑÜÀÈÌÒÙÇáéíóúñüàèìòùç.'\- ]{0,30}?)\s*:\s+(\S.*)$")
+_NAME_BRACKET_RX = re.compile(r"^\s*\[([^\]\d][^\]]{0,38})\]\s*:?\s*(\S.*)$")
+_NAME_CAPS_RX = re.compile(r"^\s*([A-ZÁÉÍÓÚÑÜÀÈÌÒÙÇ][A-ZÁÉÍÓÚÑÜÀÈÌÒÙÇ0-9'\-]+(?:\s[A-ZÁÉÍÓÚÑÜÀÈÌÒÙÇ][A-ZÁÉÍÓÚÑÜÀÈÌÒÙÇ0-9'\-]+){0,2})\s+(\S.*)$")
+_VOICE_RX = re.compile(r"^\s*<v(?:\.[\w.-]+)?\s+([^>]+)>\s*(.*)$")
+
+
+def _secs(h, m, s, ms=None):
+    return int(h or 0) * 3600 + int(m) * 60 + int(s) + (int((ms or "0").ljust(3, "0")[:3]) / 1000.0)
+
+
+def _clean_cue_text(t):
+    t = re.sub(r"\{\\[^}]*\}", "", t)                       # etiquetas de ASS: {\an8}
+    t = re.sub(r"</?v(?:\.[^ >]*)?(?:\s[^>]*)?>", "", t)
+    t = re.sub(r"</?c(?:\.[^>]*)?>|</?font[^>]*>|</?span[^>]*>|<\d+:\d+[^>]*>", "", t)
+    parts = re.split(r"(<\/?[ibu]>)", t)
+    out = []
+    for p in parts:
+        tagm = re.fullmatch(r"<(/?)([ibu])>", p)
+        if tagm:
+            out.append({"i": "*", "b": "**", "u": "<%su>" % tagm.group(1)}[tagm.group(2)])
+        else:
+            out.append(_md_escape(_html.unescape(p)))
+    return re.sub(r"\s+", " ", "".join(out)).strip()
+
+
+def _split_speaker(line, caps_ok):
+    """(hablante o None, texto) de una linea de subtitulo."""
+    for rx in (_VOICE_RX, _NAME_BRACKET_RX, _NAME_COLON_RX):
+        m = rx.match(line)
+        if m:
+            name = m.group(1).strip()
+            if rx is _NAME_COLON_RX and (len(name.split()) > 4 or re.search(r"\d+:\d+", name)):
+                continue
+            if rx is _NAME_BRACKET_RX and not m.group(2).strip():
+                continue
+            return name, m.group(2).strip()
+    m = _NAME_CAPS_RX.match(line)
+    if m and caps_ok(m.group(1)) and re.search(r"[a-záéíóúñü]", m.group(2)):
+        return m.group(1).strip(), m.group(2).strip()
+    return None, line.strip()
+
+
+def parse_subtitles(text):
+    """Lee .srt, .vtt o texto con '[hh:mm:ss] HABLANTE texto' por linea. Devuelve [{start, end, raw}] con raw la
+    linea de texto (con el nombre si lo tiene, aun sin separar)."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n").lstrip("﻿")
+    cues = []
+    if _CUE_TIME_RX.search(text) and re.search(r"-->", text):
+        for block in re.split(r"\n\s*\n", text):
+            lines = [x for x in block.split("\n") if x.strip()]
+            for i, ln in enumerate(lines):
+                m = _CUE_TIME_RX.match(ln)
+                if m:
+                    g = m.groups()
+                    start, end = _secs(g[0], g[1], g[2], g[3]), _secs(g[4], g[5], g[6], g[7])
+                    body = lines[i + 1:]
+                    # varias lineas que empiezan por guion: varias personas en el mismo subtitulo
+                    if len(body) > 1 and all(re.match(r"^\s*[-–—]\s*", x) for x in body):
+                        for x in body:
+                            cues.append({"start": start, "end": end, "raw": re.sub(r"^\s*[-–—]\s*", "", x)})
+                    elif body:
+                        cues.append({"start": start, "end": end, "raw": " ".join(x.strip() for x in body)})
+                    break
+    else:
+        for ln in text.split("\n"):
+            m = _PLAIN_RX.match(ln)
+            if m:
+                st = _secs(m.group(1), m.group(2), m.group(3))
+                cues.append({"start": st, "end": st, "raw": m.group(4)})
+            elif ln.strip() and cues:
+                cues[-1]["raw"] += " " + ln.strip()
+    return cues
+
+
+def detect_speakers(cues):
+    """Pone 'speaker' y 'text' en cada subtitulo."""
+    counts = {}
+    for c in cues:
+        m = _NAME_CAPS_RX.match(_VOICE_RX.sub(r"\2", c["raw"]))
+        if m:
+            counts[m.group(1)] = counts.get(m.group(1), 0) + 1
+    caps_ok = lambda n: counts.get(n, 0) >= 2 or len(re.sub(r"\W", "", n)) >= 3
+    for c in cues:
+        sp, tx = _split_speaker(c["raw"], caps_ok)
+        c["speaker"], c["text"] = sp, _clean_cue_text(tx)
+    return cues
+
+
+def group_cues(cues, merge=True, gap=3.0, carry=True):
+    """Intervenciones: [{start, speaker, text}]. carry: lo que no lleva nombre es del hablante anterior.
+    merge: junta subtitulos seguidos del mismo hablante separados menos de 'gap' segundos."""
+    out, last = [], None
+    for c in cues:
+        sp = c["speaker"] if c["speaker"] or not carry else (last or None)
+        if not c["text"]:
+            continue
+        if merge and out and out[-1]["speaker"] == sp and c["start"] - out[-1]["end"] <= gap:
+            out[-1]["text"] += " " + c["text"]
+            out[-1]["end"] = max(out[-1]["end"], c["end"])
+        else:
+            out.append({"start": c["start"], "end": c["end"], "speaker": sp, "text": c["text"]})
+        last = sp
+    return out
+
+
+def fmt_time(sec, fmt):
+    sec = int(sec)
+    h, m, s = sec // 3600, (sec % 3600) // 60, sec % 60
+    if fmt == "[mm:ss]":
+        return "[%02d:%02d]" % (sec // 60, s)
+    core = "%02d:%02d:%02d" % (h, m, s)
+    return {"[hh:mm:ss]": "[%s]", "(hh:mm:ss)": "(%s)"}.get(fmt, "%s") % core
+
+
+def parse_time_text(t):
+    nums = re.findall(r"\d+", re.sub(r"<[^>]*>|&\w+;", " ", t or ""))
+    if not nums:
+        return 0
+    nums = [int(x) for x in nums[:3]]
+    while len(nums) < 3:
+        nums.insert(0, 0)
+    return nums[0] * 3600 + nums[1] * 60 + nums[2]
+
+
+def transcript_default_cfg(speakers):
+    st = {e: {p: {"each": False, "all": None, "per": {}} for p in STYLE_PROPS} for e, _ in STYLE_ELEMS}
+    for e, _ in STYLE_ELEMS:
+        st[e]["show"]["all"] = True
+        st[e]["size"]["all"] = 100
+        for p in ("bold", "italic", "under", "upper"):
+            st[e][p]["all"] = False
+        for p in ("color", "bg", "family"):
+            st[e][p]["all"] = ""
+    st["t"]["color"]["all"] = "#888888"
+    st["t"]["size"]["all"] = 85
+    st["h"]["bold"]["all"] = True
+    st["h"]["color"]["each"] = True
+    st["h"]["color"]["per"] = {str(i + 1): SPEAKER_COLORS[i % len(SPEAKER_COLORS)] for i in range(len(speakers))}
+    return {"v": 1, "speakers": list(speakers),
+            "layout": {"time_fmt": "[hh:mm:ss]", "time_break": False, "indent": 0, "sep": ": ",
+                       "sep_break": False, "margin": 0},
+            "style": st}
+
+
+def style_value(cfg, elem, prop, n):
+    p = cfg["style"][elem][prop]
+    if p.get("each"):
+        v = p.get("per", {}).get(str(n))
+        return p.get("all") if v is None else v
+    return p.get("all")
+
+
+def _decls(elem, vals):
+    d = []
+    for prop, v in vals.items():
+        if prop == "show" and v is False:
+            d.append("display:none")
+        elif prop == "color" and v:
+            d.append("color:%s" % v)
+        elif prop == "bg" and v:
+            d.append("background-color:%s" % v)
+        elif prop == "family" and v:
+            d.append("font-family:'%s'" % v.replace("'", ""))
+        elif prop == "size" and v and int(v) != 100:
+            d.append("font-size:%d%%" % int(v))
+        elif prop == "bold" and v:
+            d.append("font-weight:bold")
+        elif prop == "italic" and v:
+            d.append("font-style:italic")
+        elif prop == "under" and v:
+            d.append("text-decoration:underline")
+        elif prop == "upper" and v:
+            d.append("text-transform:uppercase")
+    return "; ".join(d)
+
+
+def transcript_css(cfg):
+    out = []
+    lm = cfg["layout"].get("margin") or 0
+    if lm:
+        out.append(".i { margin-left: %gem; }" % lm)
+    for e, _ in STYLE_ELEMS:
+        vals = {p: cfg["style"][e][p]["all"] for p in STYLE_PROPS if not cfg["style"][e][p].get("each")}
+        d = _decls(e, vals)
+        if d:
+            out.append(".%s { %s; }" % (e, d))
+    for n in range(1, len(cfg["speakers"]) + 1):
+        for e, _ in STYLE_ELEMS:
+            vals = {p: style_value(cfg, e, p, n) for p in STYLE_PROPS if cfg["style"][e][p].get("each")}
+            d = _decls(e, vals)
+            if d:
+                out.append(".%s%d { %s; }" % (e, n, d))
+    return "\n".join(out)
+
+
+def _intervention(cfg, n, start, text):
+    lay = cfg["layout"]
+    name = cfg["speakers"][n - 1] if 0 < n <= len(cfg["speakers"]) else ""
+    t = _html.escape(fmt_time(start, lay.get("time_fmt", "[hh:mm:ss]")), quote=False)
+    t += "<br>" if lay.get("time_break") else " "
+    ind = "&emsp;&emsp;" * int(lay.get("indent") or 0)          # una tabulacion = dos espacios largos
+    h = (_html.escape(name, quote=False) + _html.escape(lay.get("sep", ": "), quote=False)) if name else ""
+    if name and lay.get("sep_break"):
+        h += "<br>" + ind
+    return ('<span class="i"><span class="t t%d">%s</span>%s<span class="h h%d">%s</span>'
+            '<span class="x x%d">%s</span></span>' % (n, t, ind, n, h, n, text))
+
+
+def transcript_head(cfg):
+    import json
+    return ("<style>\n%s\n</style>\n\n<!-- %s %s -->\n" %
+            (transcript_css(cfg), TRANSCRIPT_MARK, json.dumps(cfg, ensure_ascii=False, separators=(",", ":"))))
+
+
+def build_transcript(groups, title=None, cfg=None):
+    """Intervenciones -> (Markdown, cfg)."""
+    names = []
+    for g in groups:
+        if g["speaker"] and g["speaker"] not in names:
+            names.append(g["speaker"])
+    cfg = cfg or transcript_default_cfg(names)
+    parts = [transcript_head(cfg)]
+    if title:
+        parts.append("# %s\n" % title)
+    for g in groups:
+        n = names.index(g["speaker"]) + 1 if g["speaker"] else 0
+        parts.append(_intervention(cfg, n, g["start"], g["text"]) + "\n")
+    return "\n".join(parts), cfg
+
+
+def transcript_cfg(src):
+    import json
+    m = TRANSCRIPT_CFG_RX.search(src or "")
+    if not m:
+        return None
+    try:
+        cfg = json.loads(m.group(1))
+        return cfg if isinstance(cfg, dict) and "style" in cfg and "layout" in cfg else None
+    except Exception:
+        return None
+
+
+def transcript_apply(src, cfg):
+    """Rehace el documento con la configuracion nueva: hoja de estilo, comentario y la colocacion de cada
+    intervencion (el texto de cada una se conserva tal cual, aunque se haya editado a mano)."""
+    head = transcript_head(cfg)
+    m_style = STYLE_BLOCK_RX.search(src)
+    m_cfg = TRANSCRIPT_CFG_RX.search(src)
+    if m_style and m_cfg and m_style.start() < m_cfg.start():
+        end = m_cfg.end()
+        if src[end:end + 1] == "\n":
+            end += 1
+        src = src[:m_style.start()] + head + src[end:]
+    else:
+        src = head + "\n" + src
+    out = []
+    for ln in src.split("\n"):
+        m = TRANSCRIPT_LINE_RX.match(ln)
+        if m:
+            out.append(_intervention(cfg, int(m.group(1)), parse_time_text(m.group(2)), m.group(5)))
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
+
+def transcript_speaker_at(src, line_no):
+    """Numero de hablante de la intervencion en esa linea del Markdown (1...), o None."""
+    lines = (src or "").split("\n")
+    if 1 <= line_no <= len(lines):
+        m = TRANSCRIPT_LINE_RX.match(lines[line_no - 1])
+        if m:
+            return int(m.group(1)) or None
+    return None
+
 # ---------------------------------------------------------------------------------------------
 # Un poco de HTML dentro del Markdown (colores, subrayado, centrado...), sin ejecutar nada
 # ---------------------------------------------------------------------------------------------
@@ -1200,17 +1531,41 @@ def html_attrs(s):
     return {m.group(1).lower(): (m.group(2) or m.group(3) or m.group(4) or "") for m in ATTR_RX.finditer(s or "")}
 
 
-def html_style(tag, attrs):
-    """Estilo de una etiqueta HTML: lo de la propia etiqueta + su atributo style (+ color= de <font>, align=)."""
-    st = dict(HTML_INLINE_TAGS.get(tag, {}))
-    if tag == "font" and attrs.get("color"):
-        st["color"] = attrs["color"]
-    if attrs.get("align", "").lower() == "center" or tag == "center":
-        st["center"] = True
-    for decl in (attrs.get("style") or "").split(";"):
+FONT_INFO = {}            # etiqueta de fuente del lector -> (familia elegida o None, tamano relativo); para copiar
+_FAMILIES = []
+
+
+def _family_id(fam):
+    if fam not in _FAMILIES:
+        _FAMILIES.append(fam)
+    return _FAMILIES.index(fam)
+
+
+CSS_RULE_RX = re.compile(r"([^{}]+)\{([^{}]*)\}")
+STYLE_BLOCK_RX = re.compile(r"<style[^>]*>(.*?)</style>", re.S | re.I)
+
+
+def parse_css(text):
+    """Hoja de estilo sencilla: reglas de clase (.a, span.a, .a.b, y varias separadas por comas).
+    Devuelve [(frozenset de clases, declaraciones)] en orden."""
+    out = []
+    text = re.sub(r"/\*.*?\*/", "", text or "", flags=re.S)
+    for m in CSS_RULE_RX.finditer(text):
+        for sel in m.group(1).split(","):
+            sel = sel.strip()
+            mm = re.fullmatch(r"[a-zA-Z]*((?:\.[\w-]+)+)", sel)
+            if mm:
+                out.append((frozenset(mm.group(1).strip(".").split(".")), m.group(2)))
+    return out
+
+
+def _apply_decls(st, decls):
+    for decl in (decls or "").split(";"):
         if ":" not in decl:
             continue
-        k, v = [x.strip().lower() for x in decl.split(":", 1)]
+        k, v = decl.split(":", 1)
+        k, raw = k.strip().lower(), v.strip()
+        v = raw.lower()
         if k == "color":
             st["color"] = v
         elif k in ("background-color", "background"):
@@ -1233,8 +1588,37 @@ def html_style(tag, attrs):
                 n, u = float(m.group(1)), m.group(2) or "px"
                 st["size"] = n / 100 if u == "%" else n if u in ("em", "rem") else n / 15.0 if u == "px" else n / 11.0
                 st["size"] = max(0.5, min(3.0, st["size"]))
-        elif k == "font-family" and "mono" in v:
-            st["mono"] = True
+        elif k == "font-family":
+            fam = raw.split(",")[0].strip().strip("'\"")
+            if "mono" in v and fam.lower() in ("monospace", "ui-monospace"):
+                st["mono"] = True
+            elif fam and fam.lower() not in ("inherit", "initial", "sans-serif", "serif"):
+                st["family"] = fam
+        elif k in ("margin-left", "padding-left"):
+            m = re.match(r"([\d.]+)\s*(em|rem|px|pt)?", v)
+            if m:
+                n, u = float(m.group(1)), m.group(2) or "px"
+                st["margin"] = n if u in ("em", "rem") else n / 15.0 if u == "px" else n / 11.0
+        elif k == "display":
+            st["hide"] = v == "none"
+        elif k == "text-transform":
+            st["upper"] = v == "uppercase"
+
+
+def html_style(tag, attrs, sheet=None):
+    """Estilo de una etiqueta HTML: lo de la propia etiqueta, las reglas de clase de la hoja de estilo del
+    documento (<style>) y su atributo style (+ color= de <font>, align=)."""
+    st = dict(HTML_INLINE_TAGS.get(tag, {}))
+    if tag == "font" and attrs.get("color"):
+        st["color"] = attrs["color"]
+    if attrs.get("align", "").lower() == "center" or tag == "center":
+        st["center"] = True
+    if sheet and attrs.get("class"):
+        cls = set(attrs["class"].split())
+        for need, decls in sheet:
+            if need <= cls:
+                _apply_decls(st, decls)
+    _apply_decls(st, attrs.get("style"))
     if tag == "a" and attrs.get("href"):
         st["href"] = attrs["href"]
     return st
@@ -1258,7 +1642,7 @@ def css_color(widget, v):
 def merge_styles(stack):
     out = {}
     for st in stack:
-        out.update({k: v for k, v in st.items() if v not in (None, False) or k in ("bold", "italic", "under", "strike")})
+        out.update({k: v for k, v in st.items() if v not in (None, False) or k in ("bold", "italic", "under", "strike", "hide", "upper")})
     return out
 
 
@@ -1279,12 +1663,14 @@ class Renderer:
         self._fonts = {}
 
     # -- fuentes y etiquetas ----------------------------------------------------------------
-    def font_tag(self, mono=False, size=1.0, bold=False, italic=False):
+    def font_tag(self, mono=False, size=1.0, bold=False, italic=False, family=None):
         z = self.app.zoom
-        fam = self.app.mono_family if mono else self.app.body_family
+        fam = self.app.mono_family if mono else (family or self.app.body_family)
         base = self.app.body_size if not mono else self.app.body_size - 1
         px = max(6, int(round(base * size * z)))
-        name = "f_%s_%d_%d_%d" % ("m" if mono else "s", px, bold, italic)
+        key = "m" if mono else ("s" if not family else "c%d" % _family_id(family))
+        name = "f_%s_%d_%d_%d" % (key, px, bold, italic)
+        FONT_INFO[name] = (None if mono or not family else family, size)
         if name not in self._fonts:
             self._fonts[name] = tkfont.Font(family=fam, size=px, weight="bold" if bold else "normal",
                                             slant="italic" if italic else "roman")
@@ -1351,6 +1737,7 @@ class Renderer:
         self.decor = set()        # lineas decorativas (bajo los titulos): no se copian
         self.image_paths = {}     # imagen del lector -> archivo (para copiarla con formato)
         self.setup_tags()
+        self.sheet = parse_css("\n".join(STYLE_BLOCK_RX.findall(src or "")))   # <style> del documento
         if self.md is None:
             t.insert("end", "Falta la libreria markdown-it-py (vuelve a ejecutar el instalador).\n\n", ("muted",))
             t.insert("end", src)
@@ -1404,6 +1791,11 @@ class Renderer:
         if st.get("center"):
             self.t.tag_configure("center", justify="center")
             tags.append("center")
+        if st.get("margin"):
+            px = int(round(st["margin"] * self.app.body_size * 1.3 * z))
+            name = "lm_%d" % px
+            self.t.tag_configure(name, lmargin1=px, lmargin2=px)
+            tags.append(name)
         return tags, bool(st.get("bold")), bool(st.get("italic")), bool(st.get("mono")), size * st.get("size", 1.0)
 
     def _html_block(self, content, base):
@@ -1428,7 +1820,7 @@ class Renderer:
                 if tag == "img":
                     runs.append(("[imagen: %s]" % (a.get("alt") or a.get("src") or ""), {"italic": True}))
                     return
-                st = html_style(tag, a)
+                st = html_style(tag, a, r.sheet)
                 if re.fullmatch(r"h[1-6]", tag):
                     st.update(bold=True, size={"h1": 1.9, "h2": 1.5, "h3": 1.25}.get(tag, 1.1))
                 if tag in ("p", "div", "center", "li", "tr", "ul", "ol", "table", "blockquote", "details", "summary") or re.fullmatch(r"h[1-6]", tag):
@@ -1473,7 +1865,11 @@ class Renderer:
                 self.links[name] = st["href"]
                 self.t.tag_bind(name, "<Button-1>", lambda e, h=st["href"]: self.app.follow_link(h))
                 tags += ["link", name]
-            self._ins(text, base + tags + [self.font_tag(mono=mono, size=size, bold=bold, italic=italic)])
+            if st.get("hide"):
+                continue
+            if st.get("upper"):
+                text = text.upper()
+            self._ins(text, base + tags + [self.font_tag(mono=mono, size=size, bold=bold, italic=italic, family=st.get("family"))])
             any_text = True
         if any_text:
             if self.t.get("end-2c", "end-1c") != "\n":
@@ -1698,8 +2094,11 @@ class Renderer:
                         continue                              # comentarios: no se ven
                     closing, name, attrs, selfclose = m.group(1), m.group(2).lower(), m.group(3), m.group(4)
                     if name == "br":
+                        if hstack and merge_styles([x[1] for x in hstack]).get("hide"):
+                            continue                          # dentro de algo oculto (display:none)
                         text = "\n\t" if any(str(t).startswith("li_") for t in base) else "\n"
-                        self._ins(text, tags + [self.font_tag(size=size)])
+                        hs0 = merge_styles([x[1] for x in hstack]) if hstack else {}
+                        self._ins(text, tags + (self.html_tags(hs0, size)[0] if hs0 else []) + [self.font_tag(size=size)])
                         continue
                     if closing:
                         for k in range(len(hstack) - 1, -1, -1):
@@ -1707,9 +2106,11 @@ class Renderer:
                                 del hstack[k:]
                                 break
                     elif not selfclose and name not in ("img", "hr", "wbr", "input"):
-                        hstack.append((name, html_style(name, html_attrs(attrs))))
+                        hstack.append((name, html_style(name, html_attrs(attrs), self.sheet)))
                     continue
                 hs = merge_styles([x[1] for x in hstack]) if hstack else {}
+                if hs.get("hide"):
+                    continue
                 htags, hb, hi, hm, hsize = self.html_tags(hs, size) if hs else ([], False, False, False, size)
                 tags += htags
                 if hs.get("href") and not link:
@@ -1721,9 +2122,11 @@ class Renderer:
                     tags += (["code"] if ty == "code_inline" else []) + [self.font_tag(mono=True, size=hsize * 0.95, bold=bold or hb, italic=bool(em) or hi)]
                     text = ch.content
                 else:
-                    tags.append(self.font_tag(size=hsize, bold=bold or hb, italic=bool(em) or hi))
+                    tags.append(self.font_tag(size=hsize, bold=bold or hb, italic=bool(em) or hi, family=hs.get("family")))
                     brk = ty == "hardbreak" or (ty == "softbreak" and self.app.cfg.get("breaks", True))
                     text = ch.content if ty == "text" else ("\n" if brk else " ")
+                    if hs.get("upper"):
+                        text = text.upper()
                     if text == "\n" and any(str(t).startswith("li_") for t in base):
                         text = "\n\t"          # dentro de una lista, la linea siguiente sigue alineada con el texto
                 if s:
@@ -1851,6 +2254,318 @@ FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[ \t]*$", re.M | re.S)
 # ---------------------------------------------------------------------------------------------
 # Acerca de: tarjeta con una mini demo del modo Dual (se escribe Markdown y se ve al momento)
 # ---------------------------------------------------------------------------------------------
+class ImportSubtitlesDialog:
+    """Importar subtitulos: cuenta lo que se ha leido, que hablantes salen y como juntar las frases."""
+    def __init__(self, app, cues, name):
+        self.app, self.cues, self.result = app, cues, None
+        c = app.c
+        top = self.top = tk.Toplevel(app.root)
+        top.title("Importar subtítulos — md-reader")
+        top.configure(bg=c["bg"])
+        top.transient(app.root)
+        top.resizable(False, False)
+        f = ttk.Frame(top, padding=16)
+        f.pack(fill="both", expand=True)
+        counts = {}
+        for q in cues:
+            if q["speaker"]:
+                counts[q["speaker"]] = counts.get(q["speaker"], 0) + 1
+        ttk.Label(f, text=name, style="Head.TLabel").pack(anchor="w")
+        info = "%d subtítulos." % len(cues)
+        if counts:
+            info += "  Hablantes: " + ", ".join("%s (%d)" % kv for kv in sorted(counts.items(), key=lambda kv: -kv[1]))
+        else:
+            info += "  No se han encontrado nombres de hablante (como «ANA: …» o «[ANA] …»)."
+        ttk.Label(f, text=info, wraplength=460, justify="left").pack(anchor="w", pady=(4, 10))
+        self.v_merge = tk.BooleanVar(value=True)
+        self.v_gap = tk.StringVar(value="3")
+        self.v_carry = tk.BooleanVar(value=True)
+        self.v_margin = tk.StringVar(value="0")
+        row = ttk.Frame(f)
+        row.pack(anchor="w")
+        ttk.Checkbutton(row, text="Juntar en un párrafo lo que dice seguido una misma persona, si hay menos de",
+                        variable=self.v_merge).pack(side="left")
+        ttk.Spinbox(row, from_=0, to=60, width=4, textvariable=self.v_gap).pack(side="left", padx=4)
+        ttk.Label(row, text="s entre frases").pack(side="left")
+        ttk.Checkbutton(f, text="Lo que no lleva nombre es de quien hablaba antes", variable=self.v_carry).pack(anchor="w", pady=(4, 0))
+        row = ttk.Frame(f)
+        row.pack(anchor="w", pady=(4, 0))
+        ttk.Label(row, text="Margen a la izquierda de cada intervención:").pack(side="left")
+        ttk.Spinbox(row, from_=0, to=10, width=4, textvariable=self.v_margin).pack(side="left", padx=4)
+        ttk.Label(row, text="(0 = sin margen; luego se puede cambiar)").pack(side="left")
+        ttk.Label(f, text="Después se abre «Estilo de la transcripción» para elegir colores, fuentes y colocación.",
+                  style="Muted.TLabel", wraplength=460, justify="left").pack(anchor="w", pady=(10, 0))
+        b = ttk.Frame(f)
+        b.pack(fill="x", pady=(14, 0))
+        ttk.Button(b, text="Cancelar", command=top.destroy).pack(side="right")
+        ttk.Button(b, text="Importar", style="Accent.TButton", command=self.ok).pack(side="right", padx=(0, 8))
+        top.bind("<Escape>", lambda e: top.destroy())
+        top.bind("<Return>", lambda e: self.ok())
+        top.grab_set()
+        top.focus_set()
+
+    def ok(self):
+        def num(v, d):
+            try:
+                return float(str(v).replace(",", "."))
+            except ValueError:
+                return d
+        self.result = {"merge": self.v_merge.get(), "gap": num(self.v_gap.get(), 3.0), "carry": self.v_carry.get(),
+                       "margin": max(0.0, num(self.v_margin.get(), 0.0))}
+        self.top.destroy()
+
+
+class TranscriptStyleDialog:
+    """Estilo de la transcripcion: cada opcion vale para todos o, marcando «por hablante», solo para el
+    hablante elegido a la izquierda. Los cambios se ven al momento; Ctrl+Z los deshace de una vez."""
+    PROP_LABELS = [("show", "Mostrar"), ("color", "Color"), ("bg", "Resaltado (fondo)"), ("family", "Fuente"),
+                   ("size", "Tamaño (%)"), ("bold", "Negrita"), ("italic", "Cursiva"), ("under", "Subrayado"),
+                   ("upper", "MAYÚSCULAS")]
+    DOC_FONT = "(la del documento)"
+
+    def __init__(self, app, cfg, speaker=None):
+        import copy
+        self.app, self.cfg = app, copy.deepcopy(cfg)
+        self.n = speaker or (1 if cfg["speakers"] else 0)
+        self._loading = False
+        c = app.c
+        top = self.top = tk.Toplevel(app.root)
+        top.title("Estilo de la transcripción — md-reader")
+        top.configure(bg=c["bg"])
+        top.transient(app.root)
+        top.minsize(720, 470)
+        ed = app.editor
+        ed.edit_separator()
+        ed.configure(autoseparators=False)          # todo lo del dialogo = un solo Ctrl+Z
+        outer = ttk.Frame(top, padding=12)
+        outer.pack(fill="both", expand=True)
+        bottom = ttk.Frame(outer)
+        bottom.pack(side="bottom", fill="x", pady=(10, 0))
+        ttk.Label(bottom, text="Los cambios se ven al momento. Ctrl+Z los deshace todos de una vez.",
+                  style="Muted.TLabel").pack(side="left")
+        ttk.Button(bottom, text="Cerrar", style="Accent.TButton", command=self.close).pack(side="right")
+        # hablantes
+        left = ttk.Frame(outer)
+        left.pack(side="left", fill="y", padx=(0, 12))
+        ttk.Label(left, text="Hablantes", style="Head.TLabel").pack(anchor="w")
+        self.lb = tk.Listbox(left, width=22, height=14, exportselection=False, activestyle="none",
+                             bg=c["doc_bg"], fg=c["doc_fg"], selectbackground=c["acc"], selectforeground="white",
+                             relief="flat", highlightthickness=1, highlightbackground=c["line"])
+        self.lb.pack(fill="y", expand=True, pady=(4, 6))
+        self.lb.bind("<<ListboxSelect>>", lambda e: self._pick())
+        ttk.Button(left, text="Cambiar nombre…", command=self.rename).pack(fill="x")
+        # pestanas
+        right = ttk.Frame(outer)
+        right.pack(side="left", fill="both", expand=True)
+        self.who = ttk.Label(right, text="", wraplength=440, justify="left")
+        self.who.pack(anchor="w", pady=(0, 6))
+        nb = self.nb = ttk.Notebook(right)
+        nb.pack(fill="both", expand=True)
+        self.w = {}              # (elem, prop) -> dict de variables y widgets
+        families = [self.DOC_FONT] + sorted({f for f in tkfont.families(app.root) if not f.startswith("@")}, key=str.lower)
+        for elem, label in STYLE_ELEMS:
+            pg = ttk.Frame(nb, padding=10)
+            nb.add(pg, text=label)
+            ttk.Label(pg, text="por hablante", style="Muted.TLabel").grid(row=0, column=2, sticky="w")
+            for r, (prop, plabel) in enumerate(self.PROP_LABELS, 1):
+                ttk.Label(pg, text=plabel).grid(row=r, column=0, sticky="w", pady=3, padx=(0, 10))
+                d = self.w[(elem, prop)] = {"each": tk.BooleanVar()}
+                if prop in ("show", "bold", "italic", "under", "upper"):
+                    d["var"] = tk.BooleanVar()
+                    ctl = ttk.Checkbutton(pg, variable=d["var"], command=lambda e=elem, p=prop: self._changed(e, p))
+                elif prop in ("color", "bg"):
+                    ctl = ttk.Frame(pg)
+                    d["sw"] = tk.Label(ctl, text="      ", relief="solid", borderwidth=1, cursor="hand2")
+                    d["sw"].pack(side="left")
+                    d["sw"].bind("<Button-1>", lambda ev, e=elem, p=prop: self._pick_color(e, p))
+                    ttk.Button(ctl, text="Elegir…", command=lambda e=elem, p=prop: self._pick_color(e, p)).pack(side="left", padx=6)
+                    ttk.Button(ctl, text="Sin color", command=lambda e=elem, p=prop: self._set(e, p, "")).pack(side="left")
+                elif prop == "family":
+                    d["var"] = tk.StringVar()
+                    ctl = ttk.Combobox(pg, textvariable=d["var"], values=families, width=28)
+                    ctl.bind("<<ComboboxSelected>>", lambda ev, e=elem, p=prop: self._changed(e, p))
+                    ctl.bind("<Return>", lambda ev, e=elem, p=prop: self._changed(e, p))
+                    ctl.bind("<FocusOut>", lambda ev, e=elem, p=prop: self._changed(e, p))
+                else:          # size
+                    d["var"] = tk.StringVar()
+                    ctl = ttk.Spinbox(pg, from_=40, to=300, increment=5, width=6, textvariable=d["var"],
+                                      command=lambda e=elem, p=prop: self._changed(e, p))
+                    ctl.bind("<Return>", lambda ev, e=elem, p=prop: self._changed(e, p))
+                    ctl.bind("<FocusOut>", lambda ev, e=elem, p=prop: self._changed(e, p))
+                ctl.grid(row=r, column=1, sticky="w", pady=3)
+                ttk.Checkbutton(pg, variable=d["each"], command=lambda e=elem, p=prop: self._scope(e, p)).grid(row=r, column=2, sticky="w")
+        # colocacion (para todos)
+        pg = ttk.Frame(nb, padding=10)
+        nb.add(pg, text="Colocación")
+        lay = self.cfg["layout"]
+        self.L = {"time_fmt": tk.StringVar(value=lay.get("time_fmt", "[hh:mm:ss]")),
+                  "time_break": tk.BooleanVar(value=bool(lay.get("time_break"))),
+                  "indent": tk.StringVar(value=str(lay.get("indent", 0))),
+                  "sep": tk.StringVar(value=lay.get("sep", ": ")),
+                  "sep_break": tk.BooleanVar(value=bool(lay.get("sep_break"))),
+                  "margin": tk.StringVar(value=("%g" % lay.get("margin", 0)))}
+        rows = [("Formato del tiempo", ttk.Combobox(pg, textvariable=self.L["time_fmt"], values=TIME_FORMATS, width=14, state="readonly")),
+                ("Salto de línea después del tiempo", ttk.Checkbutton(pg, variable=self.L["time_break"], command=self._layout)),
+                ("Sangría antes del hablante (tabulaciones)", ttk.Spinbox(pg, from_=0, to=8, width=4, textvariable=self.L["indent"], command=self._layout)),
+                ("Separador después del hablante", ttk.Entry(pg, textvariable=self.L["sep"], width=10)),
+                ("Salto de línea después del hablante", ttk.Checkbutton(pg, variable=self.L["sep_break"], command=self._layout)),
+                ("Margen izquierdo de cada intervención", ttk.Spinbox(pg, from_=0, to=10, increment=0.5, width=5, textvariable=self.L["margin"], command=self._layout))]
+        for r, (lab, w) in enumerate(rows):
+            ttk.Label(pg, text=lab).grid(row=r, column=0, sticky="w", pady=4, padx=(0, 12))
+            w.grid(row=r, column=1, sticky="w", pady=4)
+            if isinstance(w, (ttk.Combobox,)):
+                w.bind("<<ComboboxSelected>>", lambda e: self._layout())
+            if isinstance(w, (ttk.Entry, ttk.Spinbox)) and not isinstance(w, ttk.Combobox):
+                w.bind("<KeyRelease>", lambda e: self.top.after(250, self._layout))
+        ttk.Label(pg, text="La colocación es la misma para todas las intervenciones. Ejemplo: separador «: » → "
+                           "«ANA: hola»; « — » → «ANA — hola».", style="Muted.TLabel", wraplength=420,
+                  justify="left").grid(row=len(rows), column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self._fill_speakers()
+        self._load()
+        top.protocol("WM_DELETE_WINDOW", self.close)
+        top.bind("<Escape>", lambda e: self.close())
+        top.focus_set()
+
+    # ---- hablantes ----
+    def _fill_speakers(self):
+        self.lb.delete(0, "end")
+        for i, name in enumerate(self.cfg["speakers"], 1):
+            self.lb.insert("end", name)
+            col = style_value(self.cfg, "h", "color", i)
+            if col:
+                try:
+                    self.lb.itemconfigure(i - 1, foreground=col)
+                except tk.TclError:
+                    pass
+        if self.cfg["speakers"]:
+            self.n = min(max(1, self.n), len(self.cfg["speakers"]))
+            self.lb.selection_clear(0, "end")
+            self.lb.selection_set(self.n - 1)
+            self.lb.see(self.n - 1)
+
+    def _pick(self):
+        sel = self.lb.curselection()
+        if sel:
+            self.n = sel[0] + 1
+            self._load()
+
+    def rename(self):
+        if not self.n:
+            return
+        from tkinter import simpledialog
+        old = self.cfg["speakers"][self.n - 1]
+        new = simpledialog.askstring("Cambiar nombre", "Nombre de «%s» en toda la transcripción:" % old,
+                                     initialvalue=old, parent=self.top)
+        if new and new.strip() and new.strip() != old:
+            self.cfg["speakers"][self.n - 1] = new.strip()
+            self._fill_speakers()
+            self._load()
+            self.apply()
+
+    # ---- valores ----
+    def _load(self):
+        self._loading = True
+        name = self.cfg["speakers"][self.n - 1] if self.n else "—"
+        self.who.configure(text="Lo marcado «por hablante» se cambia solo para %s; lo demás, para todos." % name)
+        for (elem, prop), d in self.w.items():
+            p = self.cfg["style"][elem][prop]
+            d["each"].set(bool(p.get("each")))
+            v = style_value(self.cfg, elem, prop, self.n)
+            if prop in ("color", "bg"):
+                try:
+                    d["sw"].configure(bg=v or self.app.c["doc_bg"], text="      " if v else "  —  ")
+                except tk.TclError:
+                    d["sw"].configure(bg=self.app.c["doc_bg"], text="  —  ")
+            elif prop == "family":
+                d["var"].set(v or self.DOC_FONT)
+            elif prop == "size":
+                d["var"].set(str(int(v or 100)))
+            else:
+                d["var"].set(bool(v))
+        self._loading = False
+
+    def _read(self, elem, prop):
+        d = self.w[(elem, prop)]
+        if prop == "family":
+            v = d["var"].get().strip()
+            return "" if v in ("", self.DOC_FONT) else v
+        if prop == "size":
+            try:
+                return max(40, min(300, int(float(d["var"].get().replace(",", ".")))))
+            except ValueError:
+                return None
+        return bool(d["var"].get())
+
+    def _set(self, elem, prop, value):
+        p = self.cfg["style"][elem][prop]
+        if p.get("each") and self.n:
+            p.setdefault("per", {})[str(self.n)] = value
+        else:
+            p["all"] = value
+        self._load()
+        if (elem, prop) == ("h", "color"):
+            self._fill_speakers()
+        self.apply()
+
+    def _changed(self, elem, prop):
+        if self._loading:
+            return
+        v = self._read(elem, prop)
+        if v is None or v == style_value(self.cfg, elem, prop, self.n):
+            return
+        self._set(elem, prop, v)
+
+    def _scope(self, elem, prop):
+        """Pasar una opcion de «para todos» a «por hablante» (cada uno parte del valor comun) o al reves (vale
+        para todos el del hablante elegido)."""
+        p = self.cfg["style"][elem][prop]
+        each = self.w[(elem, prop)]["each"].get()
+        if each and not p.get("each"):
+            p["per"] = {str(i): p.get("all") for i in range(1, len(self.cfg["speakers"]) + 1)}
+        elif not each and p.get("each"):
+            p["all"] = style_value(self.cfg, elem, prop, self.n)
+        p["each"] = each
+        self._load()
+        self._fill_speakers()
+        self.apply()
+
+    def _pick_color(self, elem, prop):
+        from tkinter import colorchooser
+        cur = style_value(self.cfg, elem, prop, self.n) or None
+        res = colorchooser.askcolor(color=cur, parent=self.top, title="Color")
+        if res and res[1]:
+            self._set(elem, prop, res[1])
+
+    def _layout(self):
+        lay = self.cfg["layout"]
+        new = dict(lay)
+        new["time_fmt"] = self.L["time_fmt"].get()
+        new["time_break"] = bool(self.L["time_break"].get())
+        new["sep"] = self.L["sep"].get()
+        new["sep_break"] = bool(self.L["sep_break"].get())
+        for k, lo, hi in (("indent", 0, 8), ("margin", 0, 10)):
+            try:
+                v = float(self.L[k].get().replace(",", "."))
+                new[k] = max(lo, min(hi, int(v) if k == "indent" else v))
+            except ValueError:
+                pass
+        if new != lay:
+            self.cfg["layout"] = new
+            self.apply()
+
+    # ---- aplicar ----
+    def apply(self):
+        self.app.transcript_set(self.cfg)
+
+    def close(self):
+        try:
+            self.app.editor.edit_separator()
+            self.app.editor.configure(autoseparators=True)
+        except tk.TclError:
+            pass
+        self.top.destroy()
+
+
 class AboutDialog:
     def __init__(self, app):
         self.app = app
@@ -2197,6 +2912,9 @@ class App:
         m.add_command(label="Guía de formatos              F1", command=self.show_guide)
         m.add_command(label="Copiar todo con formato (para Word…)", command=self.copy_rich_all)
         m.add_separator()
+        m.add_command(label="Importar subtítulos (.srt, .vtt)…", command=self.import_subtitles)
+        m.add_command(label="Estilo de la transcripción…", command=self.transcript_style)
+        m.add_separator()
         if sys.platform == "win32":
             m.add_command(label="Abrir los .md con md-reader", command=self.associate_md)
         m.add_command(label="Buscar actualizaciones…", command=self.show_updates)
@@ -2226,6 +2944,11 @@ class App:
         st.configure("BarTitle.TLabel", background=c["panel"], foreground=c["muted"], font=(self.ui_family, 9))
         st.configure("Status.TLabel", background=c["panel"], foreground=c["muted"], padding=(10, 3), font=(self.ui_family, 8))
         st.configure("Notice.TFrame", background=c["panel2"])
+        st.configure("Head.TLabel", font=(self.ui_family, 11, "bold"))
+        st.configure("Muted.TLabel", foreground=c["muted"])
+        st.configure("TNotebook", background=c["bg"], bordercolor=c["line"])
+        st.configure("TNotebook.Tab", background=c["panel"], foreground=c["fg"], padding=(10, 4))
+        st.map("TNotebook.Tab", background=[("selected", c["panel2"])])
         st.configure("Notice.TLabel", background=c["panel2"], foreground=c["fg"])
         st.configure("TButton", background=c["panel2"], foreground=c["fg"], padding=(10, 5), borderwidth=1, bordercolor=c["line"])
         st.map("TButton", background=[("active", c["line"]), ("disabled", c["panel"])], foreground=[("disabled", c["dis"])])
@@ -2451,9 +3174,79 @@ class App:
             return self.save_as()
         return self._write(self.path)
 
+    # ---- transcripciones -------------------------------------------------------------------------
+    def import_subtitles(self):
+        d = self.cfg.get("last_dir") or os.path.expanduser("~")
+        p = filedialog.askopenfilename(parent=self.root, initialdir=d, title="Importar subtítulos",
+                                       filetypes=[("Subtítulos", "*.srt *.vtt *.txt"), ("Todos", "*.*")])
+        if not p:
+            return
+        raw = open(p, "rb").read()
+        for enc in ("utf-8-sig", "cp1252", "latin-1"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        cues = detect_speakers(parse_subtitles(text))
+        if not cues:
+            messagebox.showwarning(APP_NAME, "No se han encontrado subtítulos en ese archivo.\n\n"
+                                   "Se entienden .srt, .vtt y texto con líneas como «[00:10:01] ANA texto».", parent=self.root)
+            return
+        dlg = ImportSubtitlesDialog(self, cues, os.path.basename(p))
+        self.root.wait_window(dlg.top)
+        opt = dlg.result
+        if not opt or not self.confirm_discard():
+            return
+        groups = group_cues(cues, merge=opt["merge"], gap=opt["gap"], carry=opt["carry"])
+        title = os.path.splitext(os.path.basename(p))[0]
+        md, tcfg = build_transcript(groups, title)
+        if opt["margin"]:
+            tcfg["layout"]["margin"] = opt["margin"]
+            md = transcript_apply(md, tcfg)
+        self.show_text(md, None)
+        self.suggest_name = title + ".md"
+        self.cfg["last_dir"] = os.path.dirname(p)
+        if self.mode == "editar":
+            self.set_mode("ver")
+        self.flash("Importados %d subtítulos en %d intervenciones" % (len(cues), len(groups)))
+        self.transcript_style()
+
+    def transcript_style(self, speaker=None):
+        tcfg = transcript_cfg(self.text())
+        if tcfg is None:
+            messagebox.showinfo(APP_NAME, "Este documento no es una transcripción.\n\n"
+                                "Para crear una: Más → Importar subtítulos (.srt, .vtt)…", parent=self.root)
+            return
+        old = getattr(self, "_tdlg", None)
+        try:
+            if old and old.top.winfo_exists():
+                old.close()
+        except tk.TclError:
+            pass
+        self._tdlg = TranscriptStyleDialog(self, tcfg, speaker)
+
+    def transcript_set(self, tcfg):
+        """Aplica estilos y colocacion de la transcripcion al documento (el texto de cada intervencion no cambia)."""
+        old = self.text()
+        new = transcript_apply(old, tcfg)
+        if new == old:
+            return
+        ed = self.editor
+        line = ed.index("insert")
+        ed.delete("1.0", "end")
+        ed.insert("1.0", new)
+        try:
+            ed.mark_set("insert", line)
+        except tk.TclError:
+            pass
+        self.render_now()
+        self.highlight()
+        self._update_title()
+
     def save_as(self):
         d = os.path.dirname(self.path) if self.path else self.cfg.get("last_dir") or os.path.expanduser("~")
-        name = os.path.basename(self.path) if self.path else "sin título.md"
+        name = os.path.basename(self.path) if self.path else (getattr(self, "suggest_name", None) or "sin título.md")
         p = filedialog.asksaveasfilename(parent=self.root, initialdir=d, initialfile=name, defaultextension=".md",
                                          filetypes=[("Markdown", "*.md"), ("Todos", "*.*")], title="Guardar como")
         if not p:
@@ -2833,6 +3626,17 @@ class App:
             m.add_command(label="Copiar sin formato", command=self.copy_plain_view)
             m.add_command(label="Pegar aquí", accelerator="Ctrl+V", command=lambda: self.paste_rich(from_view=True, at=(e.x, e.y)))
             m.add_command(label="Pegar sin formato", accelerator="Ctrl+Mayús+V", command=lambda: self.paste_plain(from_view=True, at=(e.x, e.y)))
+        if transcript_cfg(self.text()) is not None:
+            n = None
+            try:
+                if where == "view":
+                    n = transcript_speaker_at(self.text(), self.renderer.line_at(self.view.index("@%d,%d" % (e.x, e.y))) + 1)
+                else:
+                    n = transcript_speaker_at(self.text(), int(self.editor.index("@%d,%d" % (e.x, e.y)).split(".")[0]))
+            except Exception:
+                pass
+            m.add_separator()
+            m.add_command(label="Estilo de la transcripción…", command=lambda n=n: self.transcript_style(n))
         m.add_separator()
         m.add_command(label="Guía de formatos", accelerator="F1", command=self.show_guide)
         try:

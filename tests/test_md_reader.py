@@ -328,6 +328,68 @@ pump(root, 30)
 ok(app.text().strip() == "**solo texto**", "sin formato en el portapapeles: se pega el texto tal cual")
 md_reader.get_clipboard_html = real
 
+# transcripciones: importar subtitulos y darles estilo
+srt = ("1\n00:10:01,000 --> 00:10:02,500\nANA: Hola, ¿qué tal?\n\n2\n00:10:03,000 --> 00:10:05,000\n[Luis] Bien, <i>gracias</i>.\n\n"
+       "3\n00:10:05,200 --> 00:10:06,000\nY tú.\n\n4\n00:11:00,000 --> 00:11:02,000\nANA: Muy bien.\n")
+cues = md_reader.detect_speakers(md_reader.parse_subtitles(srt))
+ok([c["speaker"] for c in cues] == ["ANA", "Luis", None, "ANA"], "srt: hablantes con «NOMBRE:» y «[Nombre]»")
+groups = md_reader.group_cues(cues)
+ok([(g["speaker"], g["text"]) for g in groups] == [("ANA", "Hola, ¿qué tal?"), ("Luis", "Bien, *gracias*. Y tú."), ("ANA", "Muy bien.")],
+   "srt: lo que no lleva nombre sigue a quien hablaba y se junta")
+vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Marta>Hola\n"
+ok(md_reader.detect_speakers(md_reader.parse_subtitles(vtt))[0]["speaker"] == "Marta", "vtt: <v Marta>")
+plain = "[00:10:01] HABLANTE texto\n[00:10:03] HABLANTE2 texto2\n[00:11:00] HABLANTE texto3\n"
+pg = md_reader.group_cues(md_reader.detect_speakers(md_reader.parse_subtitles(plain)))
+ok([g["speaker"] for g in pg] == ["HABLANTE", "HABLANTE2", "HABLANTE"], "texto con [hh:mm:ss] HABLANTE texto")
+tmd, tcfg = md_reader.build_transcript(pg, "Prueba")
+app.set_mode("ver")
+app.show_text(tmd, None)
+pump(root, 50)
+V = app.view
+
+
+def vtags(word):
+    i = V.search(word, "1.0")
+    return set(V.tag_names(i)) if i else set()
+
+
+ok("[00:10:01] HABLANTE: texto" in V.get("1.0", "end") and "<span" not in V.get("1.0", "end"), "transcripción: se ve limpia")
+ok("hc_c0392b" in vtags("HABLANTE:") and "hc_2471a3" in vtags("HABLANTE2"), "cada hablante con su color")
+ok("hc_888888" in vtags("[00:10:01]"), "el tiempo, en gris")
+td = md_reader.TranscriptStyleDialog(app, tcfg, 1)
+pump(root, 50)
+td.L["time_break"].set(True); td.L["indent"].set("1"); td.L["sep"].set(" : "); td._layout()
+td.w[("x", "italic")]["var"].set(True); td._changed("x", "italic")
+pump(root, 50)
+vt = V.get("1.0", "end")
+ok("[00:10:03]\n\u2003\u2003HABLANTE2 : texto2" in vt and "[00:11:00]\n\u2003\u2003HABLANTE : texto3" in vt,
+   "colocación: un cambio vale para todas las intervenciones")
+ok(any(x.endswith("_0_1") for x in vtags("texto2")) and any(x.endswith("_0_1") for x in vtags("texto3")), "texto en cursiva en todas")
+td._set("h", "color", "#00aa00")
+pump(root, 50)
+ok("hc_00aa00" in vtags("HABLANTE :") and "hc_00aa00" in vtags("HABLANTE : texto3") and "hc_2471a3" in vtags("HABLANTE2"),
+   "color por hablante: cambia en todas sus intervenciones y solo en las suyas")
+td.w[("h", "bold")]["each"].set(True); td._scope("h", "bold")
+td.n = 2; td._load(); td.w[("h", "bold")]["var"].set(False); td._changed("h", "bold")
+pump(root, 50)
+ok(any(x.endswith("_1_0") for x in vtags("HABLANTE :")) and not any(x.endswith("_1_0") for x in vtags("HABLANTE2")),
+   "una opción para todos puede pasar a ser por hablante")
+app.editor.delete("1.0", "end")
+app.editor.insert("1.0", app.text() if False else tmd.replace(">texto2<", ">texto2 **editado**<"))
+td.cfg = md_reader.transcript_cfg(app.text()); td.L["sep"].set(" — "); td._layout()
+pump(root, 50)
+ok("HABLANTE2 — texto2 editado" in V.get("1.0", "end"), "al cambiar la colocación se conserva lo editado a mano")
+td.w[("t", "show")]["var"].set(False); td._changed("t", "show")
+pump(root, 50)
+ok("[00:10" not in V.get("1.0", "end"), "el tiempo se puede ocultar")
+hh, _ = md_reader.html_from_view(V, "1.0", "end", app.renderer.links)
+ok("color:#2471a3" in hh and "[00:10" not in hh, "copiar la transcripción con formato")
+td.close()
+app.editor.edit_undo()
+pump(root, 50)
+ok(app.text() == tmd, "Ctrl+Z deshace de una vez lo hecho mientras estaba abierto el diálogo")
+app.set_mode("editar")
+
 # guia
 app.show_guide()
 pump(root, 200)
