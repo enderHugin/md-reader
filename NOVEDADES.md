@@ -1,6 +1,12 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.2.0 — 2026-11-26
+- **En tu idioma: español, inglés y catalán.** Todo el programa está traducido: menús, botones, mensajes, la bienvenida, la guía de formatos (F1) y la ventana de Actualizaciones. Se cambia en **Más ▸ Idioma / Language**.
+- El instalador también va en tu idioma: la página te ofrece el de tu navegador, y el programa empieza en ese idioma.
+- La página web, también en catalán. El selector de idioma sustituye al botón ES/EN.
+- En el menú Más, los atajos de teclado quedan alineados a la derecha.
+
 ## 0.1.10 — 2026-11-24
 - **Actualizador común de py-installer 1.3.0**, el mismo que cam-ui y widget-arena: misma ventana de Actualizaciones (con novedades, «volver a la versión anterior» y, abajo, la versión del actualizador), mismo «avisar al abrir», «actualizar sin preguntar» y «vigilar sola», y el mismo atajo secreto **Ctrl+Shift+Alt+F12** desde cualquier ventana.
 - Nunca se reinicia para actualizarse con cambios sin guardar: espera a que guardes.

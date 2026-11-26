@@ -20,6 +20,7 @@
 - **Copiar con formato** para Word, Writer o el correo: `Ctrl+C` en el lector (en el editor, botón derecho ▸ *Copiar con formato*; o *Más ▸ Copiar todo con formato*).
 - **Respeta los saltos de línea** tal como los escribes (opcional: Markdown estricto).
 - **Modo claro u oscuro**, o el del sistema.
+- **En español, inglés y catalán** (*Más ▸ Idioma / Language*). El instalador que te da la página ya va en el idioma de tu navegador, y el programa empieza en ese idioma. Los textos están en `lang/<idioma>.json` (sistema [lang-kit](https://github.com/enderHugin/lang-kit)), y la página web tiene los suyos en `site/lang/`.
 - **Índice lateral** con los títulos del documento.
 - **Buscar** (`Ctrl+F`) y **zoom** (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`).
 - **Archivos recientes**.

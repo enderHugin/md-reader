@@ -29,6 +29,17 @@ jobs:
           sudo apt-get install -y -qq python3-tk xvfb fonts-dejavu-core > /dev/null
           python3 -m pip install -q --break-system-packages markdown-it-py pillow
       - run: xvfb-run -a python3 tests/test_md_reader.py
+      - name: Idiomas (diccionarios del programa y de la pagina completos, y cada clave usada existe)
+        uses: enderHugin/lang-kit@ba79c053b2303841f571c147f8fcc7c939a71462
+        with:
+          dirs: lang
+          code: md_reader.py
+          strict: 'true'
+      - uses: enderHugin/lang-kit@ba79c053b2303841f571c147f8fcc7c939a71462
+        with:
+          dirs: site/lang
+          code: site/index.html
+          strict: 'true'
 
   instalar:
     runs-on: windows-latest
@@ -43,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: enderHugin/py-installer
-          ref: 1bc06cd8d4e19af1747eb08e122b3902f0ad8d13
+          ref: eaeed1067680b12ab23603a89170839ac3e9aeab
           path: _pyi
       - name: Montar y servir el sitio en local
         shell: bash
@@ -69,6 +80,10 @@ jobs:
           for f in md_reader.py pyi_update.py install_info.json; do test -f "$P/$f"; done
           "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import markdown_it, PIL, tkinter, pyi_update, md_reader; print('ok', md_reader.APP_VERSION)" "$P"
           "$PY" "$P/pyi_update.py" "$P/md_reader.py" check | grep -q '"state": "same"'
+          # idiomas: diccionarios instalados, lang.json del instalador (espanol) y el programa en ingles
+          for f in langkit.py lang/es.json lang/en.json lang/ca.json lang/pyi.en.json lang/common.ca.json lang.json; do test -f "$P/$f"; done
+          grep -q '"lang": "es"' "$P/lang.json"
+          "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import langkit; L = langkit.Lang(sys.argv[1], lang='en'); assert L.t('bar.open') == 'Open' and L.t('upd.title') == 'Updates', L.t('bar.open'); print('ok en')" "$P"
           if [ "$RUNNER_OS" = macOS ]; then grep -q "<string>md</string>" "$HOME/Applications/md-reader.app/Contents/Info.plist"; fi
       - name: Asociacion de .md (Windows)
         if: runner.os == 'Windows'
@@ -113,7 +128,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: enderHugin/py-installer
-          ref: 1bc06cd8d4e19af1747eb08e122b3902f0ad8d13
+          ref: eaeed1067680b12ab23603a89170839ac3e9aeab
           path: _pyi
       - name: Montar y servir el sitio en local
         shell: bash
@@ -139,6 +154,10 @@ jobs:
           for f in md_reader.py pyi_update.py install_info.json; do test -f "$P/$f"; done
           "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import markdown_it, PIL, tkinter, pyi_update, md_reader; print('ok', md_reader.APP_VERSION)" "$P"
           "$PY" "$P/pyi_update.py" "$P/md_reader.py" check | grep -q '"state": "same"'
+          # idiomas: diccionarios instalados, lang.json del instalador (espanol) y el programa en ingles
+          for f in langkit.py lang/es.json lang/en.json lang/ca.json lang/pyi.en.json lang/common.ca.json lang.json; do test -f "$P/$f"; done
+          grep -q '"lang": "es"' "$P/lang.json"
+          "$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import langkit; L = langkit.Lang(sys.argv[1], lang='en'); assert L.t('bar.open') == 'Open' and L.t('upd.title') == 'Updates', L.t('bar.open'); print('ok en')" "$P"
           if [ "$RUNNER_OS" = macOS ]; then grep -q "<string>md</string>" "$HOME/Applications/md-reader.app/Contents/Info.plist"; fi
       - name: Asociacion de .md (Windows)
         if: runner.os == 'Windows'
@@ -174,7 +193,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: enderHugin/py-installer@1bc06cd8d4e19af1747eb08e122b3902f0ad8d13
+      - uses: enderHugin/py-installer@eaeed1067680b12ab23603a89170839ac3e9aeab
         with:
           base-url: https://enderhugin.github.io/md-reader
       - uses: actions/upload-pages-artifact@v3

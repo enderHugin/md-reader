@@ -15,6 +15,11 @@ os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"] = os.path.join(TMP, "cfg")
 import tkinter as tk                      # noqa: E402
 from tkinter import messagebox            # noqa: E402
 import md_reader                          # noqa: E402
+import langkit                            # noqa: E402  (vendor/lang-kit, desde el codigo fuente)
+
+# idioma: en espanol (el original), guardando la eleccion en la carpeta de pruebas y no junto al programa
+LANG_FILE = os.path.join(TMP, "lang.json")
+langkit.init(md_reader.__file__, lang="es", settings=LANG_FILE)
 
 
 def ok(c, m):
@@ -335,5 +340,55 @@ g = app._guide
 ok(g.top.winfo_exists() and "Guía de formatos" in g.t.get("1.0", "end") and len(g.r.headings) > 8, "guia de formatos (F1)")
 g.top.destroy()
 
+root.destroy()
+
+# ---- idiomas: la interfaz entera, los documentos y el menu Idioma ---------------------------------
+import json  # noqa: E402
+for code, want in (("en", {"open": "Open", "more": "More", "find": "Find:", "welcome": "Welcome", "guide": "Formatting guide",
+                           "words": "word", "toc": "Contents"}),
+                   ("ca", {"open": "Obre", "more": "Més", "find": "Cerca:", "welcome": "Benvinguda", "guide": "Guia de formats",
+                           "words": "paraul", "toc": "Índex"})):
+    L = langkit.init(md_reader.__file__, lang=code, settings=LANG_FILE)
+    root = tk.Tk()
+    root.geometry("900x600")
+    app = md_reader.App(root, None)
+    pump(root, 150)
+    labels = [w.cget("text") for w in app.bar.winfo_children()[0].winfo_children() if "text" in w.keys()]
+    ok(want["open"] in labels and want["more"] in labels and want["toc"] in labels, "%s: barra traducida %s" % (code, labels))
+    ok([app.mode_btns[k].cget("text") for k in md_reader.MODES] == [L.t("mode." + k) for k in md_reader.MODES], "%s: modos" % code)
+    ok(want["welcome"] in root.title() and want["words"] in app.status.cget("text"), "%s: bienvenida y palabras (%s | %s)" % (code, root.title(), app.status.cget("text")))
+    ok(app.text() == L.t("doc.welcome") and not app.dirty(), "%s: el documento de bienvenida, en su idioma y sin cambios" % code)
+    m = app.menu
+    items = [m.entrycget(i, "label") for i in range(m.index("end") + 1) if m.type(i) != "separator"]
+    ok(L.menu_label() in items and L.t("menu.save_as") in items, "%s: menu Mas traducido, con Idioma (%s)" % (code, items[:4]))
+    ok(any(w.cget("text") == want["find"] for w in app.findbar.winfo_children() if "text" in w.keys()), "%s: barra de buscar" % code)
+    app.show_guide()
+    pump(root, 200)
+    g = app._guide
+    ok(want["guide"] in g.t.get("1.0", "end") and len(g.r.headings) > 8, "%s: guia de formatos" % code)
+    anchor = [h for h in L.t("doc.guide").split("](#")[1:2]][0].split(")")[0]
+    ok(anchor in g.r.anchors, "%s: el enlace interno de la guia lleva a su seccion (#%s)" % (code, anchor))
+    g.top.destroy()
+    app.about()
+    pump(root, 300)
+    ok(app._about.top.title() == L.t("about.title"), "%s: Acerca de" % code)
+    app._about.top.destroy()
+    root.destroy()
+
+# elegir otro idioma en el menu lo guarda (y ofrece reiniciar: aqui se contesta que no)
+L = langkit.init(md_reader.__file__, lang="es", settings=LANG_FILE)
+root = tk.Tk()
+app = md_reader.App(root, None)
+pump(root, 100)
+asked = []
+messagebox.askyesno = lambda *a, **k: asked.append(a) or False
+m = app.menu
+sub = root.nametowidget(m.entrycget([m.entrycget(i, "label") if m.type(i) == "cascade" else None
+                                     for i in range(m.index("end") + 1)].index(L.menu_label()), "menu"))
+names = [sub.entrycget(i, "label") for i in range(sub.index("end") + 1)]
+ok(names[0] == "Español" and "English" in names and "Català" in names, "menu Idioma: %s" % names)
+sub.invoke(names.index("Català"))
+pump(root, 50)
+ok(L.code == "ca" and json.load(open(LANG_FILE))["lang"] == "ca" and asked, "elegir catalan lo guarda en lang.json y ofrece reiniciar")
 root.destroy()
 print("TODO OK")
