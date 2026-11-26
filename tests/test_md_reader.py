@@ -353,11 +353,26 @@ def vtags(word):
     return set(V.tag_names(i)) if i else set()
 
 
-ok("[00:10:01] HABLANTE: texto" in V.get("1.0", "end") and "<span" not in V.get("1.0", "end"), "transcripción: se ve limpia")
+ok("[00:10:01]\tHABLANTE:\ttexto" in V.get("1.0", "end") and "<span" not in V.get("1.0", "end"), "transcripción: se ve limpia, en columnas")
 ok("hc_c0392b" in vtags("HABLANTE:") and "hc_2471a3" in vtags("HABLANTE2"), "cada hablante con su color")
 ok("hc_888888" in vtags("[00:10:01]"), "el tiempo, en gris")
+tabs = [str(x) for x in root.tk.splitlist(V.tk.call(V._w, "tag", "cget", "tcols", "-tabs"))]
+lm2 = int(float(V.tag_cget("tcols", "lmargin2")))
+ok(len(tabs) == 4 and tabs[1] == "right" and int(float(tabs[2])) == lm2 > 0,
+   "columnas: nombres alineados a la derecha y el texto con sangría francesa (%s, %s)" % (tabs, lm2))
+x_a = V.bbox(V.search("texto2", "1.0"))[0]
+x_b = V.bbox(V.search("texto3", "1.0"))[0]
+ok(abs(x_a - x_b) <= 1, "columnas: el texto de todos los hablantes empieza en la misma columna")
+hh, _ = md_reader.html_from_view(V, "1.0", "end", app.renderer.links)
+ok("<table" in hh and "text-align:right" in hh and "HABLANTE2:" in hh, "columnas: se copian como tabla sin bordes")
 td = md_reader.TranscriptStyleDialog(app, tcfg, 1)
 pump(root, 50)
+td.L["columns"].set(md_reader.COLUMN_CHOICES[1][1]); td._layout()
+pump(root, 50)
+ok([str(x) for x in root.tk.splitlist(V.tk.call(V._w, "tag", "cget", "tcols", "-tabs"))][1] == "left", "columnas: nombres a la izquierda")
+td.L["columns"].set(md_reader.COLUMN_CHOICES[0][1]); td._layout()
+pump(root, 50)
+ok("[00:10:03] HABLANTE2: texto2" in V.get("1.0", "end"), "sin columnas: todo seguido")
 td.L["time_break"].set(True); td.L["indent"].set("1"); td.L["sep"].set(" : "); td._layout()
 td.w[("x", "italic")]["var"].set(True); td._changed("x", "italic")
 pump(root, 50)

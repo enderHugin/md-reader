@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -307,7 +307,7 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 
 - **Tiempo, Hablante y Texto**: mostrar u ocultar, color, resaltado, fuente, tamaño, negrita, cursiva, subrayado y mayúsculas.
 - Cada opción vale **para todos** o, marcando **por hablante**, solo para el que elijas a la izquierda. Por ejemplo: el tiempo pequeño y gris para todos, y un color distinto para cada hablante.
-- **Colocación**, igual para todas las intervenciones: formato del tiempo, salto de línea después del tiempo, sangría, separador después del nombre (`: `, ` — `…) y margen.
+- **Colocación**, igual para todas las intervenciones: **en columnas** (tiempo, nombre y texto alineados, con los nombres a la izquierda o a la derecha y el texto con sangría francesa) o todo seguido; formato del tiempo, salto de línea después del tiempo, sangría, separador después del nombre (`: `, ` — `…) y margen.
 - Cambiar una cosa cambia todas las intervenciones a la vez. Lo que hayas corregido a mano en el texto se conserva.
 - **Cambiar nombre…** renombra a un hablante en toda la transcripción.
 
@@ -474,8 +474,47 @@ def html_from_view(t, a, b, links, decor=(), images=None):
             out.append('<table style="%s">%s</table>' % (CSS_TABLE, "".join(rows)))
             table.clear()
 
+    # transcripcion en columnas: una tabla sin bordes (tiempo | nombre | texto), asi Word y Writer las respetan
+    trows, tpend = [], []
+    try:
+        tright = "right" in [str(x) for x in t.tk.splitlist(t.tk.call(t._w, "tag", "cget", "tcols", "-tabs"))]
+    except tk.TclError:
+        tright = False
+
+    def flush_trows():
+        if trows:
+            cell = "vertical-align:top;padding:0 8pt 6pt 0;border:none"
+            rows = "".join('<tr><td style="%s;white-space:nowrap">%s</td><td style="%s;white-space:nowrap%s">%s</td>'
+                           '<td style="%s">%s</td></tr>' % (cell, a_, cell, ";text-align:right" if tright else "", b_, cell, c_)
+                           for a_, b_, c_ in trows)
+            out.append('<table cellspacing="0" cellpadding="4" style="border-collapse:collapse;border:none">%s</table>' % rows)
+            trows.clear()
+
     plain = t.get(a, b)
     for line in lines:
+        if line != "HR" and "tcols" in line[1] and "".join(x[0] for x in line[0]).strip():
+            flush_all(); flush_table(); close_lists()
+            cells, cell = [], []
+            for txt, tg, hr in line[0]:
+                for k, piece in enumerate(txt.split("\t")):
+                    if k:
+                        cells.append(cell)
+                        cell = []
+                    cell.append((piece, tg, hr))
+            cells.append(cell)
+            if len(cells) == 1:                      # el tiempo en su propia linea
+                tpend.append(_inline_html(cells[0]))
+                continue
+            while len(cells) < 3:
+                cells.insert(0, [])
+            first = "<br>".join(tpend + ([_inline_html(cells[0])] if _inline_html(cells[0]) else []))
+            tpend.clear()
+            nm = _inline_html(cells[1])
+            trows.append((first + ("&nbsp;&nbsp;" if first else ""), nm + ("&nbsp;&nbsp;" if nm else ""),
+                          _inline_html([x for c in cells[2:] for x in c])))
+            continue
+        if line != "HR" and "".join(x[0] for x in line[0]).strip():
+            flush_trows()
         if line == "HR":
             flush_all(); flush_table(); close_lists()
             if out and re.match(r"<h[1-6] ", out[-1]) and CSS_RULE not in out[-1]:
@@ -563,7 +602,7 @@ def html_from_view(t, a, b, links, decor=(), images=None):
         if lm:
             margin[0] = int(max(lm) * 0.75)            # px de la pantalla -> pt
         para.append(_inline_html(segs))
-    flush_all(); flush_table(); close_lists()
+    flush_all(); flush_table(); flush_trows(); close_lists()
     return "\n".join(out), plain
 
 
@@ -1230,10 +1269,11 @@ def html_to_md(src):
 TRANSCRIPT_MARK = "md-reader:transcripcion"
 TRANSCRIPT_CFG_RX = re.compile(r"<!--\s*" + re.escape(TRANSCRIPT_MARK) + r"\s*(\{.*?\})\s*-->", re.S)
 TRANSCRIPT_LINE_RX = re.compile(
-    r'^<span class="i"><span class="t t(\d+)">(.*?)</span>((?:&emsp;)*)<span class="h h\1">(.*?)</span>'
+    r'^<span class="i"><span class="t t(\d+)">(.*?)</span>((?:&emsp;|\t)*)<span class="h h\1">(.*?)</span>\t?'
     r'<span class="x x\1">(.*)</span></span>[ \t]*$')
 SPEAKER_COLORS = ["#c0392b", "#2471a3", "#1e8449", "#b9770e", "#7d3c98", "#117a65", "#a04000", "#2e4053",
                   "#c2185b", "#00838f"]
+COLUMN_CHOICES = [("", "No: todo seguido"), ("left", "Sí, nombres a la izquierda"), ("right", "Sí, nombres a la derecha (los «:» alineados)")]
 TIME_FORMATS = ["[hh:mm:ss]", "hh:mm:ss", "(hh:mm:ss)", "[mm:ss]"]
 STYLE_PROPS = ["show", "color", "bg", "family", "size", "bold", "italic", "under", "upper"]
 STYLE_ELEMS = (("t", "Tiempo"), ("h", "Hablante"), ("x", "Texto"))
@@ -1381,7 +1421,7 @@ def transcript_default_cfg(speakers):
     st["h"]["color"]["per"] = {str(i + 1): SPEAKER_COLORS[i % len(SPEAKER_COLORS)] for i in range(len(speakers))}
     return {"v": 1, "speakers": list(speakers),
             "layout": {"time_fmt": "[hh:mm:ss]", "time_break": False, "indent": 0, "sep": ": ",
-                       "sep_break": False, "margin": 0},
+                       "sep_break": False, "margin": 0, "columns": "right"},
             "style": st}
 
 
@@ -1420,8 +1460,10 @@ def _decls(elem, vals):
 def transcript_css(cfg):
     out = []
     lm = cfg["layout"].get("margin") or 0
-    if lm:
-        out.append(".i { margin-left: %gem; }" % lm)
+    cols = cfg["layout"].get("columns")
+    if lm or cols:
+        out.append(".i { %s }" % " ".join((["margin-left: %gem;" % lm] if lm else []) +
+                                          (["--md-columns: %s;" % cols] if cols else [])))
     for e, _ in STYLE_ELEMS:
         vals = {p: cfg["style"][e][p]["all"] for p in STYLE_PROPS if not cfg["style"][e][p].get("each")}
         d = _decls(e, vals)
@@ -1440,6 +1482,13 @@ def _intervention(cfg, n, start, text):
     lay = cfg["layout"]
     name = cfg["speakers"][n - 1] if 0 < n <= len(cfg["speakers"]) else ""
     t = _html.escape(fmt_time(start, lay.get("time_fmt", "[hh:mm:ss]")), quote=False)
+    if lay.get("columns"):
+        # en columnas: tiempo <tab> nombre <tab> texto; el lector pone las tabulaciones a la medida del nombre
+        # mas largo (alineados a la izquierda o a la derecha) y el texto con sangria francesa
+        t += "<br>" if lay.get("time_break") else ""
+        h = (_html.escape(name, quote=False) + _html.escape(lay.get("sep", ": ").rstrip(), quote=False)) if name else ""
+        return ('<span class="i"><span class="t t%d">%s</span>\t<span class="h h%d">%s</span>\t'
+                '<span class="x x%d">%s</span></span>' % (n, t, n, h, n, text))
     t += "<br>" if lay.get("time_break") else " "
     ind = "&emsp;&emsp;" * int(lay.get("indent") or 0)          # una tabulacion = dos espacios largos
     h = (_html.escape(name, quote=False) + _html.escape(lay.get("sep", ": "), quote=False)) if name else ""
@@ -1737,7 +1786,10 @@ class Renderer:
         self.decor = set()        # lineas decorativas (bajo los titulos): no se copian
         self.image_paths = {}     # imagen del lector -> archivo (para copiarla con formato)
         self.setup_tags()
-        self.sheet = parse_css("\n".join(STYLE_BLOCK_RX.findall(src or "")))   # <style> del documento
+        css_text = "\n".join(STYLE_BLOCK_RX.findall(src or ""))
+        self.sheet = parse_css(css_text)                                        # <style> del documento
+        mcol = re.search(r"--md-columns\s*:\s*(left|right)", css_text)
+        self.columns = mcol.group(1) if mcol else None
         if self.md is None:
             t.insert("end", "Falta la libreria markdown-it-py (vuelve a ejecutar el instalador).\n\n", ("muted",))
             t.insert("end", src)
@@ -1752,6 +1804,7 @@ class Renderer:
         # quitar el salto final sobrante
         if t.get("end-2c", "end-1c") == "\n":
             t.delete("end-2c", "end-1c")
+        self._fit_columns()
         t.configure(state="disabled")
         self.fit_lines()
         t.yview_moveto(y)
@@ -2106,11 +2159,16 @@ class Renderer:
                                 del hstack[k:]
                                 break
                     elif not selfclose and name not in ("img", "hr", "wbr", "input"):
-                        hstack.append((name, html_style(name, html_attrs(attrs), self.sheet)))
+                        _a = html_attrs(attrs)
+                        _st = html_style(name, _a, self.sheet)
+                        _st["_cls"] = tuple(_a.get("class", "").split())
+                        hstack.append((name, _st))
                     continue
                 hs = merge_styles([x[1] for x in hstack]) if hstack else {}
                 if hs.get("hide"):
                     continue
+                for _n, _st in hstack:
+                    tags += ["cls_" + c for c in _st.get("_cls", ())]
                 htags, hb, hi, hm, hsize = self.html_tags(hs, size) if hs else ([], False, False, False, size)
                 tags += htags
                 if hs.get("href") and not link:
@@ -2197,6 +2255,43 @@ class Renderer:
             self.decor.add(str(fr))
         self._ins("\n", [self.font_tag(size=0.5 if thin else 1.0)])
         self.lines.append(fr)
+
+    def _fit_columns(self):
+        """Transcripcion en columnas: tabulaciones a la medida del tiempo y del nombre mas largos, y el texto con
+        sangria francesa (las lineas siguientes empiezan bajo el texto, no bajo el tiempo)."""
+        if not getattr(self, "columns", None):
+            return
+        t = self.t
+
+        def width(tag):
+            w, rr = 0, t.tag_ranges(tag)
+            for k in range(0, len(rr), 2):
+                txt = t.get(rr[k], rr[k + 1])
+                if "\n" in txt:                     # tiempo en su propia linea: no ocupa columna
+                    continue
+                f = next((x for x in t.tag_names(rr[k]) if x in self._fonts), None)
+                font = self._fonts[f] if f else tkfont.nametofont("TkDefaultFont")
+                w = max(w, font.measure(txt.strip("\t")))
+            return w
+        wt, wh = width("cls_t"), width("cls_h")
+        base = 0
+        rr = t.tag_ranges("cls_i")
+        if not rr:
+            return
+        for x in t.tag_names(rr[0]):
+            if x.startswith("lm_") and x[3:].isdigit():
+                base = int(x[3:])
+        gap = int(round(self.app.body_size * 0.9 * self.app.zoom))
+        x1 = base + (wt + gap if wt else 0)
+        x2 = x1 + wh + gap
+        if self.columns == "right":                 # (las tabulaciones cuentan desde el mismo sitio que el margen)
+            tabs = (x1 + wh, "right", x2, "left")
+        else:
+            tabs = (x1, "left", x2, "left")
+        t.tag_configure("tcols", tabs=tabs, lmargin1=base, lmargin2=x2)
+        for k in range(0, len(rr), 2):
+            t.tag_add("tcols", rr[k], rr[k + 1])
+        t.tag_raise("tcols")
 
     def fit_lines(self):
         w = self.t.winfo_width() - 2 * int(self.t.cget("padx")) - 6
@@ -2403,8 +2498,11 @@ class TranscriptStyleDialog:
                   "indent": tk.StringVar(value=str(lay.get("indent", 0))),
                   "sep": tk.StringVar(value=lay.get("sep", ": ")),
                   "sep_break": tk.BooleanVar(value=bool(lay.get("sep_break"))),
-                  "margin": tk.StringVar(value=("%g" % lay.get("margin", 0)))}
-        rows = [("Formato del tiempo", ttk.Combobox(pg, textvariable=self.L["time_fmt"], values=TIME_FORMATS, width=14, state="readonly")),
+                  "margin": tk.StringVar(value=("%g" % lay.get("margin", 0))),
+                  "columns": tk.StringVar(value=dict(COLUMN_CHOICES).get(lay.get("columns") or "", COLUMN_CHOICES[0][1]))}
+        rows = [("Tiempo, nombre y texto en columnas\n(el texto, con sangría francesa)",
+                 ttk.Combobox(pg, textvariable=self.L["columns"], values=[x[1] for x in COLUMN_CHOICES], width=40, state="readonly")),
+                ("Formato del tiempo", ttk.Combobox(pg, textvariable=self.L["time_fmt"], values=TIME_FORMATS, width=14, state="readonly")),
                 ("Salto de línea después del tiempo", ttk.Checkbutton(pg, variable=self.L["time_break"], command=self._layout)),
                 ("Sangría antes del hablante (tabulaciones)", ttk.Spinbox(pg, from_=0, to=8, width=4, textvariable=self.L["indent"], command=self._layout)),
                 ("Separador después del hablante", ttk.Entry(pg, textvariable=self.L["sep"], width=10)),
@@ -2418,7 +2516,8 @@ class TranscriptStyleDialog:
             if isinstance(w, (ttk.Entry, ttk.Spinbox)) and not isinstance(w, ttk.Combobox):
                 w.bind("<KeyRelease>", lambda e: self.top.after(250, self._layout))
         ttk.Label(pg, text="La colocación es la misma para todas las intervenciones. Ejemplo: separador «: » → "
-                           "«ANA: hola»; « — » → «ANA — hola».", style="Muted.TLabel", wraplength=420,
+                           "«ANA: hola»; « — » → «ANA — hola». En columnas, la columna de los nombres se ajusta al más "
+                           "largo, y la sangría y el salto después del hablante no se usan.", style="Muted.TLabel", wraplength=420,
                   justify="left").grid(row=len(rows), column=0, columnspan=2, sticky="w", pady=(10, 0))
         self._fill_speakers()
         self._load()
@@ -2543,6 +2642,7 @@ class TranscriptStyleDialog:
         new["time_break"] = bool(self.L["time_break"].get())
         new["sep"] = self.L["sep"].get()
         new["sep_break"] = bool(self.L["sep_break"].get())
+        new["columns"] = next((k for k, lab in COLUMN_CHOICES if lab == self.L["columns"].get()), "") or None
         for k, lo, hi in (("indent", 0, 8), ("margin", 0, 10)):
             try:
                 v = float(self.L[k].get().replace(",", "."))

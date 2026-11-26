@@ -1,6 +1,10 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.2.1 — 2026-11-26
+- **Transcripciones en columnas**: el tiempo, el nombre y lo que dice, alineados. Los nombres pueden ir a la izquierda o a la derecha (con los «:» alineados), y el texto lleva sangría francesa: las líneas siguientes empiezan bajo el texto, no bajo el tiempo. La columna de los nombres se ajusta al más largo. Está en *Estilo de la transcripción → Colocación*, y es la colocación de las transcripciones nuevas.
+- Al copiar con formato, una transcripción en columnas va a Word y Writer como una tabla sin bordes, para que las columnas se mantengan.
+
 ## 0.2.0 — 2026-11-26
 - **Transcripciones desde subtítulos.** *Más → Importar subtítulos* lee `.srt`, `.vtt` o texto con `[hh:mm:ss] HABLANTE texto`, reconoce a los hablantes y puede juntar lo que alguien dice seguido y dejar margen.
 - **Estilo de la transcripción**: tiempo, hablante y texto con su color, resaltado, fuente, tamaño, negrita, cursiva, subrayado y mayúsculas; cada opción **para todos o por hablante**. La colocación (salto tras el tiempo, sangría, separador, margen) es la misma para todas las intervenciones. Un cambio se ve al momento en toda la transcripción y se deshace con un solo Ctrl+Z.
