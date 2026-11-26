@@ -105,7 +105,8 @@ code { font: 500 .92em var(--mono); }
 .top nav { display: flex; gap: 22px; }
 .top nav a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .top nav a:hover { text-decoration: underline; }
-.lang { font: 600 .95rem var(--text); color: var(--ink); background: transparent; border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.lang { font: 600 .95rem var(--text); color: var(--ink); background: transparent; border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.lang option { color: #111; }
 .lang:hover { border-color: var(--ink); }
 @media (max-width: 760px) { .top nav { display: none; } }
 
@@ -241,14 +242,14 @@ footer span:first-child { margin-right: auto; }
 <header class="top">
   <div class="wrap">
     <a class="brand" href="#"><img src="img/icon.png" alt="" width="28" height="28">md-reader</a>
-    <nav aria-label="Secciones">
-      <a href="#que" data-en="What it does">Qué hace</a>
-      <a href="#modos" data-en="Modes">Modos</a>
-      <a href="#instalar" data-en="Install">Instalar</a>
-      <a href="#opinar" data-en="Feedback">Opinar</a>
-      <a href="#apoya" data-en="Support">Apoya</a>
+    <nav aria-label="Secciones" data-t-attr="aria-label:site.aria.sections">
+      <a href="#que" data-t-html="site.what_does">Qué hace</a>
+      <a href="#modos" data-t-html="site.modes">Modos</a>
+      <a href="#instalar" data-t-html="site.install">Instalar</a>
+      <a href="#opinar" data-t-html="site.feedback">Opinar</a>
+      <a href="#apoya" data-t-html="site.support">Apoya</a>
     </nav>
-    <button class="lang" id="lang" type="button" aria-label="Cambiar idioma / Switch language">EN</button>
+    <select class="lang" id="lang" data-langkit-picker aria-label="Idioma / Language"></select>
   </div>
 </header>
 
@@ -257,36 +258,36 @@ footer span:first-child { margin-right: auto; }
   <div class="wrap">
     <div class="hero-head">
       <div>
-        <h1 data-en="Markdown, nice to read and plain to edit.">Markdown, bonito al leer y tal cual al editar.</h1>
-        <p class="hero-lead" data-en="md-reader shows Markdown with its real formatting and lets you edit the text as it is. Reader, editor, or both at once, in light or dark mode.">md-reader enseña el Markdown con su formato de verdad y te deja editar el texto tal cual. Lector, editor o los dos a la vez, en modo claro u oscuro.</p>
+        <h1 data-t-html="site.markdown_nice_read_plain">Markdown, bonito al leer y tal cual al editar.</h1>
+        <p class="hero-lead" data-t-html="site.md_reader_shows_markdown">md-reader enseña el Markdown con su formato de verdad y te deja editar el texto tal cual. Lector, editor o los dos a la vez, en modo claro u oscuro.</p>
       </div>
       <div class="get">
-        <a class="dl-btn" id="download" href="dl/md-reader-instalar.cmd" download><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg></span><span id="dl-label" data-en="Download for Windows">Descargar para Windows</span></a>
-        <small id="dl-note" data-en="Free, no ads. One click: it brings everything it needs, you don't need Python installed. Windows 10 or 11.">Gratis y sin anuncios. Un clic: trae todo lo que necesita, no hace falta tener Python. Windows 10 u 11.</small>
-        <small class="alt" id="dl-other"><span data-en="Other system:">Otro sistema:</span> <a href="dl/md-reader-instalar.cmd" download>Windows</a> · <a href="dl/md-reader-instalar-macos.zip" download>macOS</a></small>
+        <a class="dl-btn" id="download" href="dl/md-reader-instalar.cmd" download><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg></span><span id="dl-label" data-t-html="site.download_for_windows">Descargar para Windows</span></a>
+        <small id="dl-note" data-t-html="site.free_no_ads_one">Gratis y sin anuncios. Un clic: trae todo lo que necesita, no hace falta tener Python. Windows 10 u 11.</small>
+        <small class="alt" id="dl-other"><span data-t-html="site.other_system">Otro sistema:</span> <a href="dl/md-reader-instalar.cmd" download>Windows</a> · <a href="dl/md-reader-instalar-macos.zip" download>macOS</a></small>
       </div>
     </div>
 
-    <div class="app" id="app" data-mode="dividido" role="region" aria-label="Demostración de md-reader: escribe a la izquierda y míralo a la derecha" data-en-label="md-reader demo: type on the left and see it on the right">
+    <div class="app" id="app" data-mode="dividido" role="region" aria-label="Demostración de md-reader: escribe a la izquierda y míralo a la derecha" data-t-attr="aria-label:site.demo_label">
       <div class="bar">
-        <button type="button" tabindex="-1" data-en="Open">Abrir</button>
-        <button type="button" tabindex="-1" data-en="Save">Guardar</button>
-        <div class="seg" role="group" aria-label="Modo">
-          <button type="button" data-mode="ver" aria-pressed="false" data-en="Reader">Lector</button>
-          <button type="button" data-mode="editar" aria-pressed="false" data-en="Editor">Editor</button>
-          <button type="button" data-mode="dividido" aria-pressed="true" data-en="Dual">Dual</button>
+        <button type="button" tabindex="-1" data-t-html="site.open">Abrir</button>
+        <button type="button" tabindex="-1" data-t-html="site.save">Guardar</button>
+        <div class="seg" role="group" aria-label="Modo" data-t-attr="aria-label:site.aria.mode">
+          <button type="button" data-mode="ver" aria-pressed="false" data-t-html="site.reader">Lector</button>
+          <button type="button" data-mode="editar" aria-pressed="false" data-t-html="site.editor">Editor</button>
+          <button type="button" data-mode="dividido" aria-pressed="true" data-t-html="site.dual">Dual</button>
         </div>
         <span class="file">notas.md</span>
         <span class="grow"></span>
-        <button type="button" id="theme" data-en="Light">Claro</button>
+        <button type="button" id="theme" data-t-html="site.light">Claro</button>
       </div>
       <div class="body">
-        <textarea class="ed" id="ed" spellcheck="false" aria-label="Texto Markdown"></textarea>
+        <textarea class="ed" id="ed" spellcheck="false" aria-label="Texto Markdown" data-t-attr="aria-label:site.aria.md_text"></textarea>
         <div class="view" id="view" aria-live="polite"></div>
       </div>
       <div class="status" id="status">0 palabras</div>
     </div>
-    <p class="hint" data-en="This is a live demo: write in the left panel and the right one changes as you type. The program does the same, with your own files.">Esta demostración funciona de verdad: escribe en el panel izquierdo y el derecho cambia mientras escribes. El programa hace lo mismo, con tus propios archivos.</p>
+    <p class="hint" data-t-html="site.this_is_live_demo">Esta demostración funciona de verdad: escribe en el panel izquierdo y el derecho cambia mientras escribes. El programa hace lo mismo, con tus propios archivos.</p>
   </div>
 </section>
 
@@ -294,19 +295,19 @@ footer span:first-child { margin-right: auto; }
   <div class="wrap">
     <div class="sec-head">
       <div>
-        <h2 data-en="Read it, edit it, done">Léelo, edítalo y listo</h2>
-        <p data-en="No word processor in between: the file stays plain Markdown, and you see it formatted while you work on it.">Sin procesador de textos de por medio: el archivo sigue siendo Markdown normal, y lo ves con formato mientras trabajas en él.</p>
+        <h2 data-t-html="site.read_edit_done">Léelo, edítalo y listo</h2>
+        <p data-t-html="site.no_word_processor_in">Sin procesador de textos de por medio: el archivo sigue siendo Markdown normal, y lo ves con formato mientras trabajas en él.</p>
       </div>
       <dl class="spec">
-        <div><dt data-en="Real formatting">Formato de verdad</dt><dd data-en="Headings, bold, italics, strikethrough, nested lists, task boxes, tables, code, quotes, rules, links and images. Links to a section (#…) or to another .md open inside the program.">Títulos, negrita, cursiva, tachado, listas anidadas, casillas de tareas, tablas, código, citas, líneas, enlaces e imágenes. Los enlaces a una sección (#…) o a otro .md se abren dentro del programa.</dd></div>
-        <div><dt data-en="Three modes">Tres modos</dt><dd data-en="Reader, Editor (the Markdown text as it is, with a subtle highlight) and Dual (both at once: what you type shows up right away). Ctrl+E switches between reader and editor in the same window.">Lector, Editor (el texto Markdown tal cual, con un resaltado discreto) y Dual (los dos a la vez: lo que escribes se ve al momento). Ctrl+E cambia entre lector y editor en la misma ventana.</dd></div>
-        <div><dt data-en="Edit from the reader">Editar desde el lector</dt><dd data-en="Click a task box to tick it (it changes [ ] ↔ [x] in the text), and Ctrl+E opens the editor right where you clicked.">Un clic en una casilla de tarea la marca (cambia [ ] ↔ [x] en el texto), y Ctrl+E abre el editor justo donde hiciste clic.</dd></div>
-        <div><dt data-en="Formats at hand">Formatos a mano</dt><dd data-en="Select a piece and right click: bold, italics, strikethrough, code, link, headings, lists, task boxes, quote or code block, in the editor or in the reader. F1 opens a guide with every format, how to write it and how it looks.">Selecciona un trozo y pulsa el botón derecho: negrita, cursiva, tachado, código, enlace, títulos, listas, casillas, cita o bloque de código, en el editor o en el lector. F1 abre una guía con cada formato, cómo se escribe y cómo se ve.</dd></div>
-        <div><dt data-en="Copy into Word">Copiar a Word</dt><dd data-en="Ctrl+C in the reader copies with formatting: paste into Word, Writer or an email and the headings, bold, lists and tables stay. Or More ▸ “Copy all with formatting” for the whole document.">Ctrl+C en el lector copia con formato: pégalo en Word, Writer o un correo y se conservan los títulos, la negrita, las listas y las tablas. O Más ▸ «Copiar todo con formato» para el documento entero.</dd></div>
-        <div><dt data-en="Light or dark">Claro u oscuro</dt><dd data-en="One button, or follow the system setting. The same simple look as cam-ui.">Con un botón, o como lo tenga el sistema. El mismo aspecto sencillo que cam-ui.</dd></div>
-        <div><dt data-en="Outline and search">Índice y buscar</dt><dd data-en="A side outline with the document's headings, search with Ctrl+F, zoom with Ctrl+= and Ctrl+-, and recent files.">Un índice lateral con los títulos del documento, buscar con Ctrl+F, zoom con Ctrl+= y Ctrl+-, y archivos recientes.</dd></div>
-        <div><dt data-en="Respects your files">Respeta tus archivos</dt><dd data-en="It saves in the same format it opened them: encoding, BOM and Windows line endings. If the file changes outside the program it reloads by itself; if you have unsaved changes, it warns you instead of overwriting them.">Guarda en el mismo formato en que los abrió: codificación, BOM y saltos de línea de Windows. Si el archivo cambia fuera del programa, se recarga solo; si tienes cambios sin guardar, avisa en vez de pisarlos.</dd></div>
-        <div><dt data-en="Updates itself">Se actualiza solo</dt><dd data-en="It checks for a new version when it opens and asks first (or not, if you prefer). It keeps a copy of the previous version so you can go back with one click.">Mira si hay versión nueva al abrirse y pregunta antes (o no, si lo prefieres). Guarda una copia de la anterior para volver con un clic.</dd></div>
+        <div><dt data-t-html="site.real_formatting">Formato de verdad</dt><dd data-t-html="site.headings_bold_italics_strikethrough">Títulos, negrita, cursiva, tachado, listas anidadas, casillas de tareas, tablas, código, citas, líneas, enlaces e imágenes. Los enlaces a una sección (#…) o a otro .md se abren dentro del programa.</dd></div>
+        <div><dt data-t-html="site.three_modes">Tres modos</dt><dd data-t-html="site.reader_editor_markdown_text">Lector, Editor (el texto Markdown tal cual, con un resaltado discreto) y Dual (los dos a la vez: lo que escribes se ve al momento). Ctrl+E cambia entre lector y editor en la misma ventana.</dd></div>
+        <div><dt data-t-html="site.edit_from_reader">Editar desde el lector</dt><dd data-t-html="site.click_task_box_tick">Un clic en una casilla de tarea la marca (cambia [ ] ↔ [x] en el texto), y Ctrl+E abre el editor justo donde hiciste clic.</dd></div>
+        <div><dt data-t-html="site.formats_at_hand">Formatos a mano</dt><dd data-t-html="site.select_piece_right_click">Selecciona un trozo y pulsa el botón derecho: negrita, cursiva, tachado, código, enlace, títulos, listas, casillas, cita o bloque de código, en el editor o en el lector. F1 abre una guía con cada formato, cómo se escribe y cómo se ve.</dd></div>
+        <div><dt data-t-html="site.copy_into_word">Copiar a Word</dt><dd data-t-html="site.ctrl_c_in_reader">Ctrl+C en el lector copia con formato: pégalo en Word, Writer o un correo y se conservan los títulos, la negrita, las listas y las tablas. O Más ▸ «Copiar todo con formato» para el documento entero.</dd></div>
+        <div><dt data-t-html="site.light_or_dark">Claro u oscuro</dt><dd data-t-html="site.one_button_or_follow">Con un botón, o como lo tenga el sistema. El mismo aspecto sencillo que cam-ui.</dd></div>
+        <div><dt data-t-html="site.outline_search">Índice y buscar</dt><dd data-t-html="site.side_outline_with_document">Un índice lateral con los títulos del documento, buscar con Ctrl+F, zoom con Ctrl+= y Ctrl+-, y archivos recientes.</dd></div>
+        <div><dt data-t-html="site.respects_your_files">Respeta tus archivos</dt><dd data-t-html="site.saves_in_same_format">Guarda en el mismo formato en que los abrió: codificación, BOM y saltos de línea de Windows. Si el archivo cambia fuera del programa, se recarga solo; si tienes cambios sin guardar, avisa en vez de pisarlos.</dd></div>
+        <div><dt data-t-html="site.updates_itself">Se actualiza solo</dt><dd data-t-html="site.checks_for_new_version">Mira si hay versión nueva al abrirse y pregunta antes (o no, si lo prefieres). Guarda una copia de la anterior para volver con un clic.</dd></div>
       </dl>
     </div>
   </div>
@@ -314,22 +315,22 @@ footer span:first-child { margin-right: auto; }
 
 <section id="modos">
   <div class="wrap">
-    <h2 data-en="Reader, editor and dual">Lector, editor y dual</h2>
+    <h2 data-t-html="site.reader_editor_dual">Lector, editor y dual</h2>
     <div class="modes">
       <figure>
-        <img class="shot" src="img/oscuro.webp" width="1100" height="780" alt="md-reader en modo oscuro, como lector, con el índice a la izquierda" data-en-alt="md-reader in dark mode, as a reader, with the outline on the left" loading="lazy">
-        <figcaption data-en="<b>Reader, dark mode.</b> The document with its formatting and the outline of headings on the side.">
+        <img class="shot" src="img/oscuro.webp" width="1100" height="780" alt="md-reader en modo oscuro, como lector, con el índice a la izquierda" data-t-attr="alt:site.alt_md_reader_in" loading="lazy">
+        <figcaption data-t-html="site.reader_dark_mode_document">
           <b>Lector, modo oscuro.</b> El documento con su formato y el índice de títulos al lado.</figcaption>
       </figure>
       <div class="modes-row">
         <figure>
-          <img class="shot" src="img/claro.webp" width="1100" height="780" alt="md-reader en modo claro" data-en-alt="md-reader in light mode" loading="lazy">
-          <figcaption data-en="<b>Light mode.</b> One button switches it, or it follows the system.">
+          <img class="shot" src="img/claro.webp" width="1100" height="780" alt="md-reader en modo claro" data-t-attr="alt:site.alt_md_reader_in_2" loading="lazy">
+          <figcaption data-t-html="site.light_mode_one_button">
             <b>Modo claro.</b> Se cambia con un botón, o sigue al sistema.</figcaption>
         </figure>
         <figure>
-          <img class="shot" src="img/dividido.webp" width="1100" height="780" alt="md-reader en modo dual: texto Markdown a la izquierda y resultado a la derecha" data-en-alt="md-reader in dual mode: Markdown text on the left and the result on the right" loading="lazy">
-          <figcaption data-en="<b>Dual.</b> The text on the left, the result on the right, updated as you type.">
+          <img class="shot" src="img/dividido.webp" width="1100" height="780" alt="md-reader en modo dual: texto Markdown a la izquierda y resultado a la derecha" data-t-attr="alt:site.alt_md_reader_in_3" loading="lazy">
+          <figcaption data-t-html="site.dual_text_on_left">
             <b>Dual.</b> El texto a la izquierda y el resultado a la derecha, al día mientras escribes.</figcaption>
         </figure>
       </div>
@@ -339,55 +340,55 @@ footer span:first-child { margin-right: auto; }
 
 <section id="instalar" class="band">
   <div class="wrap">
-    <h2 data-en="Install">Instalar</h2>
+    <h2 data-t-html="site.install_2">Instalar</h2>
     <div class="install">
       <div>
-        <div class="os-tabs" role="group" aria-label="Sistema">
+        <div class="os-tabs" role="group" aria-label="Sistema" data-t-attr="aria-label:site.aria.system">
           <button type="button" data-os="win" aria-pressed="true">Windows</button>
           <button type="button" data-os="mac" aria-pressed="false">macOS</button>
         </div>
         <ol class="steps" data-os="win">
-          <li><h3 data-en="Download the installer">Descarga el instalador</h3><p data-en="One small file, <a href='dl/md-reader-instalar.cmd' download>md-reader-instalar.cmd</a>. You can read it before running it.">Un archivo pequeño, <a href="dl/md-reader-instalar.cmd" download>md-reader-instalar.cmd</a>. Puedes leerlo antes de ejecutarlo.</p></li>
-          <li><h3 data-en="Open it">Ábrelo</h3><p data-en="If Windows warns you, choose “More info” and “Run anyway”. It sets up its own Python (you don't need one) and takes a minute or two the first time.">Si Windows avisa, elige «Más información» y «Ejecutar de todos modos». Prepara su propio Python (no necesitas tenerlo) y la primera vez tarda un minuto o dos.</p></li>
-          <li><h3 data-en="Use it from the Start menu">Úsalo desde el menú Inicio</h3><p data-en="md-reader opens when it finishes, and appears in the Explorer's “Open with” for .md files. To always open them with it: right click on one ▸ Open with ▸ Choose another app ▸ md-reader ▸ “Always”.">md-reader se abre al terminar y aparece en el «Abrir con» de los .md. Para abrirlos siempre con él: clic derecho en uno ▸ Abrir con ▸ Elegir otra aplicación ▸ md-reader ▸ «Usar siempre».</p></li>
+          <li><h3 data-t-html="site.download_installer">Descarga el instalador</h3><p data-t-html="site.one_small_file_md">Un archivo pequeño, <a href="dl/md-reader-instalar.cmd" download>md-reader-instalar.cmd</a>. Puedes leerlo antes de ejecutarlo.</p></li>
+          <li><h3 data-t-html="site.open_2">Ábrelo</h3><p data-t-html="site.if_windows_warns_you">Si Windows avisa, elige «Más información» y «Ejecutar de todos modos». Prepara su propio Python (no necesitas tenerlo) y la primera vez tarda un minuto o dos.</p></li>
+          <li><h3 data-t-html="site.use_from_start_menu">Úsalo desde el menú Inicio</h3><p data-t-html="site.md_reader_opens_when">md-reader se abre al terminar y aparece en el «Abrir con» de los .md. Para abrirlos siempre con él: clic derecho en uno ▸ Abrir con ▸ Elegir otra aplicación ▸ md-reader ▸ «Usar siempre».</p></li>
         </ol>
         <ol class="steps" data-os="mac" hidden>
-          <li><h3 data-en="Download the installer">Descarga el instalador</h3><p data-en="<a href='dl/md-reader-instalar-macos.zip' download>md-reader-instalar-macos.zip</a>, and unzip it (double click).">El archivo <a href="dl/md-reader-instalar-macos.zip" download>md-reader-instalar-macos.zip</a>, y descomprímelo (doble clic).</p></li>
-          <li><h3 data-en="Open it with right click ▸ Open">Ábrelo con clic derecho ▸ Abrir</h3><p data-en="The first time, macOS asks for confirmation because it is not from the App Store. A terminal window shows the progress.">La primera vez macOS pide confirmación porque no viene de la App Store. Se abre una ventana de terminal con el progreso.</p></li>
-          <li><h3 data-en="Find it in Applications">Encuéntralo en Aplicaciones</h3><p data-en="It ends up in the Applications folder of your user (~/Applications), opens when it finishes, and appears in “Open with” for .md files.">Queda en la carpeta Aplicaciones de tu usuario (~/Applications), se abre al terminar y aparece en el «Abrir con» de los .md.</p></li>
+          <li><h3 data-t-html="site.download_installer_2">Descarga el instalador</h3><p data-t-html="site.md_reader_instalar_macos">El archivo <a href="dl/md-reader-instalar-macos.zip" download>md-reader-instalar-macos.zip</a>, y descomprímelo (doble clic).</p></li>
+          <li><h3 data-t-html="site.open_with_right_click">Ábrelo con clic derecho ▸ Abrir</h3><p data-t-html="site.first_time_macos_asks">La primera vez macOS pide confirmación porque no viene de la App Store. Se abre una ventana de terminal con el progreso.</p></li>
+          <li><h3 data-t-html="site.find_in_applications">Encuéntralo en Aplicaciones</h3><p data-t-html="site.ends_up_in_applications">Queda en la carpeta Aplicaciones de tu usuario (~/Applications), se abre al terminar y aparece en el «Abrir con» de los .md.</p></li>
         </ol>
       </div>
       <div class="manual">
-        <h3 data-en="By hand">A mano</h3>
-        <p data-en="With Python 3.10 or newer (on Linux, the system one with python3-tk):">Con Python 3.10 o superior (en Linux, el del sistema con python3-tk):</p>
+        <h3 data-t-html="site.by_hand">A mano</h3>
+        <p data-t-html="site.with_python_3_10">Con Python 3.10 o superior (en Linux, el del sistema con python3-tk):</p>
         <code>pip install markdown-it-py pillow
 python md_reader.py notas.md</code>
-        <p data-en="Source code and notes: <a href='__REPO_URL__'>GitHub</a>">Código y notas: <a href="__REPO_URL__">GitHub</a></p>
+        <p data-t-html="site.source_code_notes_github">Código y notas: <a href="__REPO_URL__">GitHub</a></p>
       </div>
     </div>
     <details>
-      <summary data-en="What does the installer put on my computer?">¿Qué instala y dónde?</summary>
-      <p data-en="Everything goes into your own user folders: on Windows the program in %LOCALAPPDATA%\Programs\md-reader and its own Python in %LOCALAPPDATA%\md-reader, with a Start menu and desktop shortcut, and it appears in “Installed apps”; on macOS, md-reader.app in ~/Applications. It does not touch any Python you already have, or ask for administrator rights.">Todo va a tus propias carpetas de usuario: en Windows, el programa en %LOCALAPPDATA%\Programs\md-reader y su Python propio en %LOCALAPPDATA%\md-reader, con acceso en el menú Inicio y en el escritorio, y aparece en «Aplicaciones instaladas»; en macOS, md-reader.app en ~/Applications. No toca el Python que ya tengas ni pide permisos de administrador.</p>
+      <summary data-t-html="site.what_does_installer_put">¿Qué instala y dónde?</summary>
+      <p data-t-html="site.everything_goes_into_your">Todo va a tus propias carpetas de usuario: en Windows, el programa en %LOCALAPPDATA%\Programs\md-reader y su Python propio en %LOCALAPPDATA%\md-reader, con acceso en el menú Inicio y en el escritorio, y aparece en «Aplicaciones instaladas»; en macOS, md-reader.app en ~/Applications. No toca el Python que ya tengas ni pide permisos de administrador.</p>
     </details>
     <details>
-      <summary data-en="How do I remove it?">¿Cómo lo quito?</summary>
-      <p data-en="On Windows, from Settings → Apps → Installed apps, “md-reader”. On macOS, run the uninstaller the installer tells you about at the end (bash “~/Library/Application Support/md-reader/uninstall.sh”). Your Markdown files are never touched.">En Windows, desde Configuración → Aplicaciones → Aplicaciones instaladas, «md-reader». En macOS, con el desinstalador que indica el instalador al terminar (bash "~/Library/Application Support/md-reader/uninstall.sh"). Tus archivos Markdown nunca se tocan.</p>
+      <summary data-t-html="site.how_do_i_remove">¿Cómo lo quito?</summary>
+      <p data-t-html="site.on_windows_from_settings">En Windows, desde Configuración → Aplicaciones → Aplicaciones instaladas, «md-reader». En macOS, con el desinstalador que indica el instalador al terminar (bash "~/Library/Application Support/md-reader/uninstall.sh"). Tus archivos Markdown nunca se tocan.</p>
     </details>
     <details>
-      <summary data-en="Why does Windows warn me about the file?">¿Por qué Windows me avisa al abrir el archivo?</summary>
-      <p data-en="The installer is a plain script that is not signed by a company, and Windows warns about any downloaded script. Open it with a text editor if you want to check it: it only downloads md-reader, its Python and its two libraries.">El instalador es un script sin firmar por una empresa, y Windows avisa con cualquier script descargado. Ábrelo con un editor de texto si quieres comprobarlo: solo descarga md-reader, su Python y sus dos librerías.</p>
+      <summary data-t-html="site.why_does_windows_warn">¿Por qué Windows me avisa al abrir el archivo?</summary>
+      <p data-t-html="site.installer_is_plain_script">El instalador es un script sin firmar por una empresa, y Windows avisa con cualquier script descargado. Ábrelo con un editor de texto si quieres comprobarlo: solo descarga md-reader, su Python y sus dos librerías.</p>
     </details>
     <details>
-      <summary data-en="And Linux?">¿Y Linux?</summary>
-      <p data-en="Not yet with the installer: the Python it would bring on Linux draws text with old, unsmoothed fonts, and it would look bad. From the source code with the system's Python (python3-tk package) it works fine.">Todavía no con instalador: el Python que traería en Linux dibuja el texto con fuentes antiguas sin suavizar y se vería mal. Desde el código, con el Python del sistema (paquete python3-tk), funciona bien.</p>
+      <summary data-t-html="site.linux">¿Y Linux?</summary>
+      <p data-t-html="site.not_yet_with_installer">Todavía no con instalador: el Python que traería en Linux dibuja el texto con fuentes antiguas sin suavizar y se vería mal. Desde el código, con el Python del sistema (paquete python3-tk), funciona bien.</p>
     </details>
     <details>
-      <summary data-en="Does it send anything anywhere?">¿Envía algo a alguna parte?</summary>
-      <p data-en="No. It only connects to this page to check for updates. Your documents stay on your computer.">No. Solo se conecta a esta página para mirar si hay actualizaciones. Tus documentos se quedan en tu ordenador.</p>
+      <summary data-t-html="site.does_send_anything_anywhere">¿Envía algo a alguna parte?</summary>
+      <p data-t-html="site.no_only_connects_this">No. Solo se conecta a esta página para mirar si hay actualizaciones. Tus documentos se quedan en tu ordenador.</p>
     </details>
     <details>
-      <summary data-en="Does it update itself?">¿Se actualiza solo?</summary>
-      <p data-en="Yes. It checks for a newer version when it opens and asks before installing it; you can also check by hand in More ▸ “Check for updates”, or tick “update automatically when opening”. It keeps a copy of the version you had and can go back to it with one click.">Sí. Mira si hay una versión más nueva al abrirse y pregunta antes de instalarla; también puedes mirarlo a mano en Más ▸ «Buscar actualizaciones», o marcar «actualizar automáticamente al abrir». Guarda una copia de la versión que tenías y puede volver a ella con un clic.</p>
+      <summary data-t-html="site.does_update_itself">¿Se actualiza solo?</summary>
+      <p data-t-html="site.yes_checks_for_newer">Sí. Mira si hay una versión más nueva al abrirse y pregunta antes de instalarla; también puedes mirarlo a mano en Más ▸ «Buscar actualizaciones», o marcar «actualizar automáticamente al abrir». Guarda una copia de la versión que tenías y puede volver a ella con un clic.</p>
     </details>
   </div>
 </section>
@@ -396,42 +397,42 @@ python md_reader.py notas.md</code>
   <div class="wrap">
     <div class="sec-head">
       <div>
-        <h2 data-en="Tell me how it goes">Cuéntame cómo te va</h2>
-        <p data-en="It is worth writing even if everything worked: it tells me what to look after.">Vale la pena escribir aunque todo haya ido bien: me dice qué cuidar.</p>
+        <h2 data-t-html="site.tell_me_how_goes">Cuéntame cómo te va</h2>
+        <p data-t-html="site.is_worth_writing_even">Vale la pena escribir aunque todo haya ido bien: me dice qué cuidar.</p>
       </div>
     </div>
     <div class="routes">
       <a class="route r1" href="__REPO_URL__/issues/new?template=opinion.yml">
-        <h3 data-en="Share my experience">Dar mi opinión</h3>
-        <p data-en="What you use it for, what you liked and what cost you.">Para qué lo usas, qué te ha gustado y qué te ha costado.</p>
+        <h3 data-t-html="site.share_my_experience">Dar mi opinión</h3>
+        <p data-t-html="site.what_you_use_for">Para qué lo usas, qué te ha gustado y qué te ha costado.</p>
       </a>
       <a class="route r2" href="__REPO_URL__/issues/new?template=bug_report.yml">
-        <h3 data-en="Something does not work">Algo no funciona</h3>
-        <p data-en="A file looks wrong, something is not saved, the program closes.">Un archivo se ve mal, algo no se guarda, el programa se cierra.</p>
+        <h3 data-t-html="site.something_does_not_work">Algo no funciona</h3>
+        <p data-t-html="site.file_looks_wrong_something">Un archivo se ve mal, algo no se guarda, el programa se cierra.</p>
       </a>
       <a class="route r3" href="__REPO_URL__/issues/new?template=feature_request.yml">
-        <h3 data-en="Ask for a feature">Pedir una función</h3>
-        <p data-en="Tell me what you are trying to do and I will look at how to make it possible.">Cuéntame qué intentas conseguir y veo cómo hacerlo posible.</p>
+        <h3 data-t-html="site.ask_for_feature">Pedir una función</h3>
+        <p data-t-html="site.tell_me_what_you">Cuéntame qué intentas conseguir y veo cómo hacerlo posible.</p>
       </a>
     </div>
-    <p class="note" data-en="You need a free GitHub account. You can also <a href='__REPO_URL__/issues'>read what others have sent</a>.">Hace falta una cuenta gratuita de GitHub. También puedes <a href="__REPO_URL__/issues">leer lo que han enviado otras personas</a>.</p>
+    <p class="note" data-t-html="site.you_need_free_github">Hace falta una cuenta gratuita de GitHub. También puedes <a href="__REPO_URL__/issues">leer lo que han enviado otras personas</a>.</p>
   </div>
 </section>
 
 <section id="apoya" class="support">
   <div class="wrap">
     <div>
-      <h2 data-en="Support md-reader">Apoya md-reader</h2>
-      <p style="margin-top:14px" data-en="md-reader is free and has no ads. If it is useful to you, buy me a coffee and help me keep improving it.">md-reader es gratis y no tiene anuncios. Si te resulta útil, invítame a un café y ayúdame a seguir mejorándolo.</p>
+      <h2 data-t-html="site.support_md_reader">Apoya md-reader</h2>
+      <p style="margin-top:14px" data-t-html="site.md_reader_is_free">md-reader es gratis y no tiene anuncios. Si te resulta útil, invítame a un café y ayúdame a seguir mejorándolo.</p>
       <div class="about">
-        <img src="img/acerca.webp" width="508" height="596" alt="Ventana «Acerca de» de md-reader, con una demostración que se escribe sola y el botón de Ko-fi" data-en-alt="md-reader “About” window, with a demo that types itself and the Ko-fi button" loading="lazy">
-        <p style="font-size:1rem" data-en="It is also inside the program: More ▸ “About md-reader”, with a little demo of the dual mode that types itself. Made with care by Jaime Luis Olguín Mesina.">También está dentro del programa: Más ▸ «Acerca de md-reader», con una pequeña demostración del modo dual que se escribe sola. Hecho con cariño por Jaime Luis Olguín Mesina.</p>
+        <img src="img/acerca.webp" width="508" height="596" alt="Ventana «Acerca de» de md-reader, con una demostración que se escribe sola y el botón de Ko-fi" data-t-attr="alt:site.alt_md_reader_about" loading="lazy">
+        <p style="font-size:1rem" data-t-html="site.is_also_inside_program">También está dentro del programa: Más ▸ «Acerca de md-reader», con una pequeña demostración del modo dual que se escribe sola. Hecho con cariño por Jaime Luis Olguín Mesina.</p>
       </div>
     </div>
     <div>
       <a class="kofi" href="https://ko-fi.com/jaimeluisolguinmesina" rel="noopener">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8z"/><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v2M12 3v2"/></svg>
-        <span data-en="Buy me a coffee">Invítame a un café</span>
+        <span data-t-html="site.buy_me_coffee">Invítame a un café</span>
       </a>
     </div>
   </div>
@@ -441,23 +442,23 @@ python md_reader.py notas.md</code>
 <footer>
   <div class="wrap">
     <span>md-reader v__VERSION__</span>
-    <span data-en="Free software, MIT license">Software libre, licencia MIT</span>
+    <span data-t-html="site.free_software_mit_license">Software libre, licencia MIT</span>
     <a href="https://enderhugin.github.io/cam-ui/">cam-ui</a>
     <a href="https://enderhugin.github.io/widget-arena/">widget-arena</a>
     <a href="__REPO_URL__">GitHub</a>
   </div>
 </footer>
 
+<script src="langkit.js"></script>
 <script>
 (function () {
   "use strict";
   var root = document.documentElement;
 
   /* ---------- demo: Markdown sencillo (lo justo para la demostración; el programa usa markdown-it) ---------- */
-  var DEMO = {
-    es: "# Notas de la semana\n\nEscribe aquí y mira el resultado **al momento**.\n\n## Pendiente\n\n- [x] Probar md-reader\n- [ ] Pasar las notas a limpio\n- Repasar el *índice*\n\n> Lector, editor o los dos a la vez.\n\n```\nCtrl+E  lector <-> editor\n```\n\nMás en [la web](#que).\n",
-    en: "# Notes of the week\n\nType here and see the result **right away**.\n\n## To do\n\n- [x] Try md-reader\n- [ ] Clean up the notes\n- Check the *outline*\n\n> Reader, editor or both at once.\n\n```\nCtrl+E  reader <-> editor\n```\n\nMore on [the site](#que).\n"
-  };
+  // textos: site/lang/<idioma>.json con lang-kit (langkit.js); mientras cargan, lo que trae el HTML (espanol)
+  var L = null;
+  function t(k, v) { return L ? L.t(k, v) : k; }
   function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function inline(s) {
     var codes = [];
@@ -491,11 +492,11 @@ python md_reader.py notas.md</code>
     return out.join("\n");
   }
   var app = document.getElementById("app"), ed = document.getElementById("ed"), view = document.getElementById("view"), status = document.getElementById("status");
-  var lang = "es", edited = false;
+  var edited = false;
   function render() {
     view.innerHTML = md(ed.value);
     var n = (ed.value.match(/[\wÀ-ÿ]+/g) || []).length;
-    status.textContent = lang === "en" ? n + " words" : n + " palabras";
+    if (L) status.textContent = t("site.js.words", { n: n });
   }
   ed.addEventListener("input", function () { edited = true; render(); });
   view.addEventListener("click", function (e) { var a = e.target.closest("a"); if (a && a.getAttribute("href").charAt(0) !== "#") { e.preventDefault(); } });
@@ -508,7 +509,7 @@ python md_reader.py notas.md</code>
   var themeBtn = document.getElementById("theme");
   function themeLabel() {
     var light = app.classList.contains("light");
-    themeBtn.textContent = light ? (lang === "en" ? "Dark" : "Oscuro") : (lang === "en" ? "Light" : "Claro");
+    if (L) themeBtn.textContent = light ? t("site.js.dark") : t("site.light");
   }
   themeBtn.addEventListener("click", function () { app.classList.toggle("light"); themeLabel(); });
   if (window.matchMedia && !window.matchMedia("(prefers-color-scheme: dark)").matches) app.classList.add("light");
@@ -517,23 +518,20 @@ python md_reader.py notas.md</code>
   var ua = navigator.userAgent, plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
   var os = /Win/i.test(plat + ua) ? "win" : (/Mac/i.test(plat) && !/iPhone|iPad/.test(ua)) ? "mac" : /Linux|X11/i.test(plat + ua) && !/Android/i.test(ua) ? "linux" : "";
   var dl = document.getElementById("download"), dlLabel = document.getElementById("dl-label"), dlNote = document.getElementById("dl-note");
-  var TXT = {
-    es: { win: "Descargar para Windows", mac: "Descargar para macOS", none: "Para Windows y macOS",
-          nwin: "Gratis y sin anuncios. Un clic: trae todo lo que necesita, no hace falta tener Python. Windows 10 u 11.",
-          nmac: "Gratis y sin anuncios. Descomprime el zip y abre el instalador con clic derecho ▸ Abrir. macOS 11 o superior.",
-          nlinux: "Para Linux todavía no hay instalador (mira «¿Y Linux?» más abajo); desde el código funciona.",
-          title: "md-reader · lee y edita Markdown" },
-    en: { win: "Download for Windows", mac: "Download for macOS", none: "For Windows and macOS",
-          nwin: "Free, no ads. One click: it brings everything it needs, you don't need Python installed. Windows 10 or 11.",
-          nmac: "Free, no ads. Unzip it and open the installer with right click ▸ Open. macOS 11 or newer.",
-          nlinux: "There is no Linux installer yet (see “And Linux?” below); it works from the source code.",
-          title: "md-reader · read and edit Markdown" }
-  };
+  // el instalador en el idioma de la pagina (py-installer: el espanol sin sufijo; los demas, -<idioma>)
+  function inst(name) {
+    var code = L ? L.code : "es";
+    return code === "es" ? name : name.replace(/(\.[a-z]+)$/, "-" + code + "$1");
+  }
   function setDownload() {
-    var T = TXT[lang];
-    if (os === "mac") { dl.href = "dl/md-reader-instalar-macos.zip"; dlLabel.textContent = T.mac; dlNote.textContent = T.nmac; }
-    else if (os === "linux") { dl.removeAttribute("download"); dl.href = "#instalar"; dl.setAttribute("aria-disabled", "true"); dlLabel.textContent = T.none; dlNote.textContent = T.nlinux; }
-    else { dl.href = "dl/md-reader-instalar.cmd"; dlLabel.textContent = T.win; dlNote.textContent = T.nwin; }
+    if (!L) return;
+    if (os === "mac") { dl.href = inst("dl/md-reader-instalar-macos.zip"); dlLabel.textContent = t("site.js.dl_mac"); dlNote.textContent = t("site.js.note_mac"); }
+    else if (os === "linux") { dl.removeAttribute("download"); dl.href = "#instalar"; dl.setAttribute("aria-disabled", "true"); dlLabel.textContent = t("site.js.dl_none"); dlNote.textContent = t("site.js.note_linux"); }
+    else { dl.href = inst("dl/md-reader-instalar.cmd"); dlLabel.textContent = t("site.download_for_windows"); dlNote.textContent = t("site.free_no_ads_one"); }
+    document.querySelectorAll('#dl-other a[href^="dl/"]').forEach(function (a) {
+      if (!a.getAttribute("data-base")) a.setAttribute("data-base", a.getAttribute("href"));
+      a.href = inst(a.getAttribute("data-base"));
+    });
   }
   /* pestañas de instalacion */
   function showOs(o) {
@@ -543,30 +541,22 @@ python md_reader.py notas.md</code>
   document.querySelectorAll(".os-tabs button").forEach(function (b) { b.addEventListener("click", function () { showOs(b.getAttribute("data-os")); }); });
   if (os === "mac") showOs("mac");
 
-  /* ---------- idioma ---------- */
-  function stored() { try { return localStorage.getItem("mdreader-lang"); } catch (e) { return null; } }
-  function setLang(l) {
-    lang = l;
-    root.lang = l; root.setAttribute("data-lang", l);
-    document.title = TXT[l].title;
-    document.querySelectorAll("[data-en]").forEach(function (el) {
-      if (el._es === undefined) el._es = el.innerHTML;
-      el.innerHTML = l === "en" ? el.getAttribute("data-en") : el._es;
-    });
-    document.querySelectorAll("[data-en-alt]").forEach(function (el) {
-      if (el._es === undefined) el._es = el.getAttribute("alt");
-      el.setAttribute("alt", l === "en" ? el.getAttribute("data-en-alt") : el._es);
-    });
-    if (app._es === undefined) app._es = app.getAttribute("aria-label");
-    app.setAttribute("aria-label", l === "en" ? app.getAttribute("data-en-label") : app._es);
-    document.getElementById("lang").textContent = l === "en" ? "ES" : "EN";
-    try { localStorage.setItem("mdreader-lang", l); } catch (e) {}
-    if (!edited) ed.value = DEMO[l];
+  /* ---------- idioma (lang-kit) ---------- */
+  function applyLang() {
+    document.title = t("site.js.title");
+    root.setAttribute("data-lang", L.code);
+    if (!edited) ed.value = t("site.js.demo");
     themeLabel(); setDownload(); render();
   }
-  document.getElementById("lang").addEventListener("click", function () { setLang(lang === "es" ? "en" : "es"); });
-  var want = stored() || ((navigator.language || "es").toLowerCase().indexOf("es") === 0 ? "es" : "en");
-  setLang(want);
+  try {     // eleccion guardada por la version anterior de la pagina
+    var old = localStorage.getItem("mdreader-lang");
+    if (old && !localStorage.getItem("langkit.lang")) localStorage.setItem("langkit.lang", old);
+  } catch (e) {}
+  LangKit.init({ dir: "lang/", langs: ["es", "en", "ca"], source: "es" }).then(function (lk) {
+    L = lk;
+    L.onChange(applyLang);
+    applyLang();
+  });
 })();
 </script>
 </body>

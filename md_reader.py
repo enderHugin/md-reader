@@ -4,6 +4,9 @@ citas, enlaces, imagenes) en modo claro u oscuro, y edicion siempre sobre el tex
 sola o al lado de la vista, que se actualiza mientras escribes.
 
 Uso:  python md_reader.py [archivo.md]
+
+Textos en lang/<idioma>.json (lang-kit: es, en, ca). El idioma lo elige el instalador (lang.json) y se
+cambia en Mas > Idioma.
 """
 import json
 import os
@@ -17,13 +20,28 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.1.10"
+APP_VERSION = "0.2.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
     from markdown_it import MarkdownIt
 except ImportError:                    # el instalador lo pone; esto es por si se ejecuta suelto
     MarkdownIt = None
+
+try:
+    import langkit                     # lang-kit: lo instala py-installer junto al programa
+except ImportError:                    # desde el codigo fuente: la copia de vendor/
+    sys.path.insert(0, os.path.join(HERE, "vendor", "lang-kit"))
+    import langkit
+
+
+def lang():
+    """Los diccionarios de md-reader (lang/*.json) en el idioma elegido."""
+    return langkit._current or langkit.init(__file__)
+
+
+def t(key, /, **values):
+    return lang().t(key, **values)
 
 # ---------------------------------------------------------------------------------------------
 # Temas (el oscuro es el de cam-ui; el claro, a juego)
@@ -46,16 +64,11 @@ THEMES = {
                   ed_bg="#fbfbfc", ed_fg="#22262e", ed_head="#1d4ed8", ed_mark="#8a919c",
                   ed_code="#9a3412", ed_link="#1d4ed8", ed_quote="#6b7280", hr="#d5d9e0"),
 }
-MODES = [("ver", "Lector"), ("editar", "Editor"), ("dividido", "Dual")]
+MODES = ("ver", "editar", "dividido")           # nombres: t("mode.<clave>")
 SITE_URL = "https://enderhugin.github.io/md-reader/"
 REPO_URL = "https://github.com/enderHugin/md-reader"
 KOFI_URL = "https://ko-fi.com/jaimeluisolguinmesina"
-ABOUT_TAGLINE = "Lee y edita Markdown, en claro u oscuro."
-ABOUT_CHIPS = ("Lector", "Editor", "Dual", "Claro · Oscuro", "Índice", "Se actualiza solo")
-ABOUT_ASK = "Si md-reader te resulta útil, invítame a un café y ayúdame a seguir mejorándolo."
-ABOUT_BTN = "☕  Invítame a un café en Ko-fi"
-ABOUT_CREDIT = "Hecho con cariño por Jaime Luis Olguín Mesina"
-ABOUT_DEMO = "# Hola\n\nEsto es **md-reader**:\n\n- escribes *Markdown*\n- lo ves al momento\n\n> claro u oscuro\n"
+ABOUT_CHIPS = ("mode.ver", "mode.editar", "mode.dividido", "about.chip.themes", "about.chip.toc", "about.chip.updates")
 ZOOM_MIN, ZOOM_MAX = 0.6, 2.4
 
 
@@ -118,197 +131,7 @@ def read_text(path):
     return text.replace("\r\n", "\n").replace("\r", "\n"), enc, nl
 
 
-WELCOME = """# md-reader
-
-Lee y edita **Markdown** con su formato de verdad: títulos, listas, tablas, código, citas, enlaces e imágenes.
-
-## Para empezar
-
-- **Abrir** un archivo: `Ctrl+O`, o con doble clic en un `.md` (el instalador añade md-reader al «Abrir con»).
-- **Tres modos**, arriba: *Lector*, *Editor* (el texto Markdown tal cual) y *Dual* (los dos a la vez: lo que escribes se ve al momento). `Ctrl+E` cambia entre lector y editor.
-- **En el lector**: clic en una casilla ☐ para marcarla; `Ctrl+E` pasa al editor justo donde hiciste clic.
-- **Guardar**: `Ctrl+S`. Si el archivo cambia fuera mientras lo ves, se recarga solo.
-- **Tema**: claro u oscuro con el botón de arriba; en *Más ▸ Tema*, también «como el sistema».
-
-## Atajos
-
-| Atajo | Qué hace |
-|---|---|
-| `Ctrl+O` / `Ctrl+N` | abrir / nuevo |
-| `Ctrl+S` / `Ctrl+Shift+S` | guardar / guardar como |
-| `Ctrl+E` | lector ↔ editor |
-| `Ctrl+F` | buscar |
-| `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | más grande / más pequeño / tamaño normal |
-| `Ctrl+B` / `Ctrl+I` | (editando) **negrita** / *cursiva* |
-| `Ctrl+V` | pegar: lo copiado de Word, Writer o una web entra como Markdown |
-| `Ctrl+Shift+V` | pegar sin formato |
-| `F5` | volver a leer el archivo |
-
-> Las actualizaciones llegan solas; también puedes buscarlas en *Más ▸ Buscar actualizaciones*.
-
-```python
-print("hola desde md-reader")
-```
-"""
-
-
-GUIDE = """# Guía de formatos
-
-Cada formato, con **cómo se escribe** (el recuadro) y **cómo se ve** (debajo). Puedes ponerlos a mano o seleccionar un trozo y usar el **botón derecho** del ratón, en el editor o en el lector.
-
-## Texto
-
-```
-**negrita**   *cursiva*   ***las dos***   ~~tachado~~   `código`
-```
-
-**negrita**   *cursiva*   ***las dos***   ~~tachado~~   `código`
-
-Atajos en el editor: `Ctrl+B` negrita, `Ctrl+I` cursiva.
-
-## Títulos
-
-```
-# Título grande
-## Título mediano
-### Título pequeño
-```
-
-Un `#` al principio de la línea, seguido de un espacio. Hasta seis niveles (`######`). Salen en el *Índice*.
-
-## Párrafos y saltos de línea
-
-```
-Un párrafo.
-Esta línea sale debajo.
-
-Una línea en blanco empieza otro párrafo.
-```
-
-Un párrafo.
-Esta línea sale debajo.
-
-Una línea en blanco empieza otro párrafo.
-
-(En *Más ▸ Respetar los saltos de línea* puedes pasar al Markdown estricto, donde un salto simple se convierte en espacio.)
-
-## Listas
-
-```
-- un punto
-- otro punto
-  - uno dentro (dos espacios delante)
-
-1. primero
-2. segundo
-```
-
-- un punto
-- otro punto
-  - uno dentro (dos espacios delante)
-
-1. primero
-2. segundo
-
-## Casillas de tareas
-
-```
-- [ ] pendiente
-- [x] hecha
-```
-
-- [ ] pendiente
-- [x] hecha
-
-En el lector, un clic en la casilla la marca o la desmarca.
-
-## Enlaces e imágenes
-
-```
-[texto del enlace](https://ejemplo.com)
-[a otra sección](#tablas)
-![descripción](foto.png)
-```
-
-[texto del enlace](https://ejemplo.com) · [a otra sección](#tablas)
-
-Las imágenes se buscan junto al archivo `.md` (por ejemplo, `foto.png` en la misma carpeta).
-
-## Citas
-
-```
-> Esto es una cita.
-> Puede tener **formato**.
-```
-
-> Esto es una cita.
-> Puede tener **formato**.
-
-## Código
-
-````
-```
-un bloque de código
-  respeta los espacios
-```
-````
-
-```
-un bloque de código
-  respeta los espacios
-```
-
-## Tablas
-
-```
-| Columna | Otra |
-|---|---|
-| a | b |
-| c | d |
-```
-
-| Columna | Otra |
-|---|---|
-| a | b |
-| c | d |
-
-## Línea horizontal
-
-```
----
-```
-
----
-
-## HTML
-
-También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado, no las etiquetas, y nada se ejecuta.
-
-```
-<span style="color:red">en rojo</span>
-<del style="color:red">tachado en rojo</del>
-<u>subrayado</u>, <mark>resaltado</mark>, H<sub>2</sub>O, x<sup>2</sup>
-<div align="center">centrado</div>
-<!-- un comentario: no se ve -->
-```
-
-<span style="color:red">en rojo</span>, <del style="color:red">tachado en rojo</del>, <u>subrayado</u>, <mark>resaltado</mark>, H<sub>2</sub>O, x<sup>2</sup>
-
-<div align="center">centrado</div>
-
-## Copiar y pegar con Word, Writer…
-
-- **Copiar**: en el lector, `Ctrl+C` copia con formato, listo para pegar en Word, Writer o un correo.
-- **Pegar**: `Ctrl+V` convierte lo copiado de Word, Writer, Google Docs o una web en Markdown: títulos, negrita, cursiva, listas, tablas, enlaces y colores.
-- `Ctrl+Shift+V` pega solo el texto, sin convertir nada.
-
-## En el lector
-
-- **Clic** en una casilla: la marca o la desmarca.
-- **Doble clic** selecciona la palabra (no cambia al editor). `Ctrl+E` abre el editor en ese sitio.
-- **Botón derecho** sobre un trozo seleccionado: darle formato sin pasar al editor.
-- `Ctrl+Z` deshace también desde el lector.
-"""
+# la bienvenida y la guia de formatos son documentos Markdown: doc.welcome y doc.guide en lang/*.json
 
 
 # ---------------------------------------------------------------------------------------------
@@ -594,7 +417,7 @@ def _win_clipboard(html_fragment, plain):
             break
         time.sleep(0.05)
     else:
-        raise OSError("el portapapeles está ocupado")
+        raise OSError(t("clip.busy"))
     try:
         u32.EmptyClipboard()
         put(13, (plain + "\0").encode("utf-16-le"))           # CF_UNICODETEXT
@@ -1352,7 +1175,7 @@ class Renderer:
         self.image_paths = {}     # imagen del lector -> archivo (para copiarla con formato)
         self.setup_tags()
         if self.md is None:
-            t.insert("end", "Falta la libreria markdown-it-py (vuelve a ejecutar el instalador).\n\n", ("muted",))
+            t.insert("end", lang().t("render.no_lib") + "\n\n", ("muted",))
             t.insert("end", src)
         else:
             try:
@@ -1360,7 +1183,7 @@ class Renderer:
                 self._render_tokens(self.md.parse(src2))
             except Exception as e:                       # nunca dejar la vista en blanco
                 t.delete("1.0", "end")
-                t.insert("end", "No se pudo dar formato a este documento (%s). Se muestra tal cual:\n\n" % e, ("muted",))
+                t.insert("end", lang().t("render.failed", error=e) + "\n\n", ("muted",))
                 t.insert("end", src)
         # quitar el salto final sobrante
         if t.get("end-2c", "end-1c") == "\n":
@@ -1426,7 +1249,7 @@ class Renderer:
                     runs.append(("HR", None))
                     return
                 if tag == "img":
-                    runs.append(("[imagen: %s]" % (a.get("alt") or a.get("src") or ""), {"italic": True}))
+                    runs.append((t("render.image", name=a.get("alt") or a.get("src") or ""), {"italic": True}))
                     return
                 st = html_style(tag, a)
                 if re.fullmatch(r"h[1-6]", tag):
@@ -1776,7 +1599,7 @@ class Renderer:
             self.links[name] = src
             self.t.tag_bind(name, "<Button-1>", lambda e, h=src: self.app.follow_link(h))
             tags += ["link", name]
-        self._ins("[imagen: %s]" % alt, tags)
+        self._ins(t("render.image", name=alt), tags)
 
     def _code_block(self, content, lists, quote, lang):
         base = self._block_tags(lists, quote)
@@ -1857,7 +1680,7 @@ class AboutDialog:
         c = app.c
         z = 1.0
         top = self.top = tk.Toplevel(app.root)
-        top.title("Acerca de md-reader")
+        top.title(t("about.title"))
         top.configure(bg=c["panel"])
         top.resizable(False, False)
         top.transient(app.root)
@@ -1874,8 +1697,8 @@ class AboutDialog:
         tt = tk.Frame(head, bg=c["panel"])
         tt.pack(side="left", fill="x")
         tk.Label(tt, text="md-reader", bg=c["panel"], fg=c["fg"], font=(ui, 20, "bold")).pack(anchor="w")
-        tk.Label(tt, text="versión %s" % APP_VERSION, bg=c["panel"], fg=c["muted"], font=(ui, 9)).pack(anchor="w")
-        tk.Label(top, text=ABOUT_TAGLINE, bg=c["panel"], fg=c["fg"], font=(ui, 11)).pack(anchor="w", pady=(6, 10), **pad)
+        tk.Label(tt, text=t("about.version", v=APP_VERSION), bg=c["panel"], fg=c["muted"], font=(ui, 9)).pack(anchor="w")
+        tk.Label(top, text=t("about.tagline"), bg=c["panel"], fg=c["fg"], font=(ui, 11)).pack(anchor="w", pady=(6, 10), **pad)
 
         # mini demo: editor | lector
         demo = tk.Frame(top, bg=c["line"], bd=0)
@@ -1894,25 +1717,25 @@ class AboutDialog:
             row = tk.Frame(chips, bg=c["panel"])
             row.pack(anchor="w", pady=3)
             for ch in ABOUT_CHIPS[r:r + 3]:
-                tk.Label(row, text=ch, bg=c["panel2"], fg=c["fg"], font=(ui, 8), padx=8, pady=3).pack(side="left", padx=(0, 6))
+                tk.Label(row, text=t(ch), bg=c["panel2"], fg=c["fg"], font=(ui, 8), padx=8, pady=3).pack(side="left", padx=(0, 6))
 
-        tk.Label(top, text=ABOUT_ASK, bg=c["panel"], fg=c["fg"], font=(ui, 10), wraplength=430, justify="left").pack(
+        tk.Label(top, text=t("about.ask"), bg=c["panel"], fg=c["fg"], font=(ui, 10), wraplength=430, justify="left").pack(
             anchor="w", pady=(10, 10), **pad)
-        btn = tk.Button(top, text=ABOUT_BTN, command=lambda: webbrowser.open(KOFI_URL), bg="#ff5e5b", fg="white",
+        btn = tk.Button(top, text=t("about.btn"), command=lambda: webbrowser.open(KOFI_URL), bg="#ff5e5b", fg="white",
                         activebackground="#e94b48", activeforeground="white", relief="flat", bd=0, cursor="hand2",
                         font=(ui, 11, "bold"), padx=18, pady=9)
         btn.pack(fill="x", **pad)
         links = tk.Frame(top, bg=c["panel"])
         links.pack(pady=(12, 2))
-        for i, (txt, url) in enumerate((("Página del programa", SITE_URL), ("Código", REPO_URL),
-                                         ("Opinar o avisar de un fallo", REPO_URL + "/issues/new/choose"))):
+        for i, (txt, url) in enumerate(((t("about.link.site"), SITE_URL), (t("about.link.code"), REPO_URL),
+                                         (t("about.link.feedback"), REPO_URL + "/issues/new/choose"))):
             if i:
                 tk.Label(links, text="·", bg=c["panel"], fg=c["muted"]).pack(side="left", padx=4)
             lb = tk.Label(links, text=txt, bg=c["panel"], fg=c["link"], font=(ui, 9, "underline"), cursor="hand2")
             lb.pack(side="left")
             lb.bind("<Button-1>", lambda e, u=url: webbrowser.open(u))
-        tk.Label(top, text=ABOUT_CREDIT, bg=c["panel"], fg=c["muted"], font=(ui, 8)).pack(pady=(4, 2))
-        tk.Label(top, text="Software libre, licencia MIT", bg=c["panel"], fg=c["muted"], font=(ui, 8)).pack(pady=(0, 16))
+        tk.Label(top, text=t("about.credit"), bg=c["panel"], fg=c["muted"], font=(ui, 8)).pack(pady=(4, 2))
+        tk.Label(top, text=t("about.license"), bg=c["panel"], fg=c["muted"], font=(ui, 8)).pack(pady=(0, 16))
         top.bind("<Escape>", lambda e: top.destroy())
         self.i = 0
         self._tick()
@@ -1929,9 +1752,10 @@ class AboutDialog:
                 return
         except tk.TclError:
             return
-        n = len(ABOUT_DEMO)
+        demo = t("about.demo")
+        n = len(demo)
         self.i = self.i + 1 if self.i < n + 40 else 0
-        txt = ABOUT_DEMO[:min(self.i, n)]
+        txt = demo[:min(self.i, n)]
         self.ed.configure(state="normal")
         self.ed.delete("1.0", "end")
         self.ed.insert("1.0", txt + ("▏" if self.i <= n and self.i % 2 else ""))
@@ -1946,7 +1770,7 @@ class GuideWindow:
         self.app = app
         c = app.c
         top = self.top = tk.Toplevel(app.root)
-        top.title("Guía de formatos — md-reader")
+        top.title(t("guide.title"))
         top.configure(bg=c["bg"])
         w, h = int(720 * max(1, app.zoom)), int(760 * max(1, app.zoom))
         top.geometry("%dx%d+%d+%d" % (w, h, app.root.winfo_rootx() + 60, app.root.winfo_rooty() + 40))
@@ -1958,7 +1782,7 @@ class GuideWindow:
         sb.pack(side="right", fill="y")
         self.t.pack(fill="both", expand=True)
         self.r = Renderer(_GuideApp(app, self), self.t)
-        self.r.render(GUIDE, None)
+        self.r.render(t("doc.guide"), None)
         self.t.bind("<Configure>", lambda e: self.r.fit_lines())
         top.bind("<Escape>", lambda e: top.destroy())
         top.bind("<F1>", lambda e: top.destroy())
@@ -2010,7 +1834,7 @@ class App:
         self.encoding, self.newline = "utf-8", "\n"
         self.saved_text = ""
         self.mtime = None
-        self.mode = self.cfg.get("mode", "ver") if self.cfg.get("mode") in dict(MODES) else "ver"
+        self.mode = self.cfg.get("mode", "ver") if self.cfg.get("mode") in MODES else "ver"
         self._render_job = self._hl_job = None
         self._find_hits, self._find_pos = [], -1
         self._ext_changed = False
@@ -2031,7 +1855,7 @@ class App:
         if path:
             self.open_path(path)
         else:
-            self.show_text(WELCOME, None)
+            self.show_text(t("doc.welcome"), None)
         root.after(1000, self._watch)
         self._updater_setup()
 
@@ -2081,23 +1905,23 @@ class App:
         self.bar.pack(fill="x")
         inner = ttk.Frame(self.bar, style="Bar.TFrame")
         inner.pack(fill="x", padx=10, pady=7)
-        ttk.Button(inner, text="Abrir", command=self.ask_open).pack(side="left")
-        self.btn_save = ttk.Button(inner, text="Guardar", command=self.save)
+        ttk.Button(inner, text=t("bar.open"), command=self.ask_open).pack(side="left")
+        self.btn_save = ttk.Button(inner, text=t("bar.save"), command=self.save)
         self.btn_save.pack(side="left", padx=(6, 0))
         self.seg = ttk.Frame(inner, style="Bar.TFrame")
         self.seg.pack(side="left", padx=(16, 0))
         self.mode_btns = {}
-        for key, label in MODES:
-            b = ttk.Button(self.seg, text=label, style="Seg.TButton", command=lambda k=key: self.set_mode(k))
+        for key in MODES:
+            b = ttk.Button(self.seg, text=t("mode." + key), style="Seg.TButton", command=lambda k=key: self.set_mode(k))
             b.pack(side="left")
             self.mode_btns[key] = b
-        self.btn_more = ttk.Menubutton(inner, text="Más", style="TMenubutton")
+        self.btn_more = ttk.Menubutton(inner, text=t("bar.more"), style="TMenubutton")
         self.btn_more.pack(side="right")
         self.menu = tk.Menu(self.btn_more, tearoff=False)
         self.btn_more["menu"] = self.menu
-        self.btn_theme = ttk.Button(inner, text="Oscuro", command=self.cycle_theme)
+        self.btn_theme = ttk.Button(inner, text=t("bar.dark"), command=self.cycle_theme)
         self.btn_theme.pack(side="right", padx=(0, 6))
-        self.btn_toc = ttk.Button(inner, text="Índice", command=self.toggle_toc)
+        self.btn_toc = ttk.Button(inner, text=t("bar.toc"), command=self.toggle_toc)
         self.btn_toc.pack(side="right", padx=(0, 6))
         self.lbl_title = ttk.Label(inner, text="", style="BarTitle.TLabel")
         self.lbl_title.pack(side="left", padx=(16, 0))
@@ -2106,12 +1930,12 @@ class App:
         self.notice = ttk.Frame(r, style="Notice.TFrame")
         self.notice_lbl = ttk.Label(self.notice, style="Notice.TLabel")
         self.notice_lbl.pack(side="left", padx=10, pady=6)
-        ttk.Button(self.notice, text="Ignorar", command=self._hide_notice).pack(side="right", padx=(4, 8), pady=4)
-        ttk.Button(self.notice, text="Recargar", style="Accent.TButton", command=lambda: (self._hide_notice(), self.reload(force=True))).pack(side="right", pady=4)
+        ttk.Button(self.notice, text=t("notice.ignore"), command=self._hide_notice).pack(side="right", padx=(4, 8), pady=4)
+        ttk.Button(self.notice, text=t("notice.reload"), style="Accent.TButton", command=lambda: (self._hide_notice(), self.reload(force=True))).pack(side="right", pady=4)
 
         # barra de busqueda
         self.findbar = ttk.Frame(r, style="Bar.TFrame")
-        ttk.Label(self.findbar, text="Buscar:", style="Bar.TLabel").pack(side="left", padx=(10, 6), pady=6)
+        ttk.Label(self.findbar, text=t("find.label"), style="Bar.TLabel").pack(side="left", padx=(10, 6), pady=6)
         self.find_var = tk.StringVar()
         self.find_entry = ttk.Entry(self.findbar, textvariable=self.find_var, width=32)
         self.find_entry.pack(side="left", pady=6)
@@ -2171,38 +1995,39 @@ class App:
     def _fill_menu(self):
         m = self.menu
         m.delete(0, "end")
-        m.add_command(label="Nuevo                     Ctrl+N", command=self.new)
-        m.add_command(label="Abrir…                     Ctrl+O", command=self.ask_open)
+        m.add_command(label=t("menu.new"), accelerator="Ctrl+N", command=self.new)
+        m.add_command(label=t("menu.open"), accelerator="Ctrl+O", command=self.ask_open)
         rec = tk.Menu(m, tearoff=False)
         recent = [p for p in self.cfg.get("recent", []) if os.path.exists(p)]
         for p in recent[:10]:
             rec.add_command(label=p, command=lambda p=p: self.open_path(p))
         if not recent:
-            rec.add_command(label="(nada todavía)", state="disabled")
-        m.add_cascade(label="Recientes", menu=rec)
-        m.add_command(label="Guardar                   Ctrl+S", command=self.save)
-        m.add_command(label="Guardar como…   Ctrl+Shift+S", command=self.save_as)
+            rec.add_command(label=t("menu.recent_none"), state="disabled")
+        m.add_cascade(label=t("menu.recent"), menu=rec)
+        m.add_command(label=t("menu.save"), accelerator="Ctrl+S", command=self.save)
+        m.add_command(label=t("menu.save_as"), accelerator="Ctrl+Shift+S", command=self.save_as)
         m.add_separator()
-        m.add_command(label="Buscar…                    Ctrl+F", command=self.open_find)
-        m.add_command(label="Más grande               Ctrl+=", command=lambda: self.set_zoom(self.zoom * 1.1))
-        m.add_command(label="Más pequeño             Ctrl+-", command=lambda: self.set_zoom(self.zoom / 1.1))
-        m.add_command(label="Tamaño normal          Ctrl+0", command=lambda: self.set_zoom(1.0))
+        m.add_command(label=t("menu.find"), accelerator="Ctrl+F", command=self.open_find)
+        m.add_command(label=t("menu.bigger"), accelerator="Ctrl+=", command=lambda: self.set_zoom(self.zoom * 1.1))
+        m.add_command(label=t("menu.smaller"), accelerator="Ctrl+-", command=lambda: self.set_zoom(self.zoom / 1.1))
+        m.add_command(label=t("menu.normal_size"), accelerator="Ctrl+0", command=lambda: self.set_zoom(1.0))
         th = tk.Menu(m, tearoff=False)
         self.theme_var = tk.StringVar(value=self.cfg.get("theme", "sistema"))
-        for k, lab in (("sistema", "Como el sistema"), ("claro", "Claro"), ("oscuro", "Oscuro")):
-            th.add_radiobutton(label=lab, value=k, variable=self.theme_var, command=lambda k=k: self.set_theme(k))
-        m.add_cascade(label="Tema", menu=th)
+        for k in ("sistema", "claro", "oscuro"):
+            th.add_radiobutton(label=t("theme." + k), value=k, variable=self.theme_var, command=lambda k=k: self.set_theme(k))
+        m.add_cascade(label=t("menu.theme"), menu=th)
+        langs = langkit.tk_menu(m, lang(), restart=self.restart_for_language)    # Idioma / Language
         self.breaks_var = tk.BooleanVar(value=self.cfg.get("breaks", True))
-        m.add_checkbutton(label="Respetar los saltos de línea", variable=self.breaks_var, command=self.toggle_breaks)
-        m.add_command(label="Guía de formatos              F1", command=self.show_guide)
-        m.add_command(label="Copiar todo con formato (para Word…)", command=self.copy_rich_all)
+        m.add_checkbutton(label=t("menu.breaks"), variable=self.breaks_var, command=self.toggle_breaks)
+        m.add_command(label=t("menu.guide"), accelerator="F1", command=self.show_guide)
+        m.add_command(label=t("menu.copy_all"), command=self.copy_rich_all)
         m.add_separator()
         if sys.platform == "win32":
-            m.add_command(label="Abrir los .md con md-reader", command=self.associate_md)
-        m.add_command(label="Buscar actualizaciones…", command=self.show_updates)
+            m.add_command(label=t("menu.associate"), command=self.associate_md)
+        m.add_command(label=t("menu.updates"), command=self.show_updates)
         m.add_separator()
-        m.add_command(label="☕  Acerca de md-reader y apoyarlo", command=self.about)
-        for w in (m, rec, th):
+        m.add_command(label=t("menu.about"), command=self.about)
+        for w in (m, rec, th, langs):
             w.configure(bg=self.c["panel"], fg=self.c["fg"], activebackground=self.c["acc"], activeforeground="white",
                         relief="flat", borderwidth=1, font=(self.ui_family, 9))
 
@@ -2260,7 +2085,7 @@ class App:
         self.editor.tag_configure("find", background=c["find"])
         self.editor.tag_configure("find_cur", background=c["find_cur"])
         self.editor.tag_raise("sel")
-        self.btn_theme.configure(text="Claro" if self.c is THEMES["oscuro"] else "Oscuro")
+        self.btn_theme.configure(text=t("bar.light") if self.c is THEMES["oscuro"] else t("bar.dark"))
         self._title_bar_dark(self.c is THEMES["oscuro"])
         self._fill_menu()
         self._mark_mode_buttons()
@@ -2305,7 +2130,7 @@ class App:
 
     # -- modos ----------------------------------------------------------------------------------
     def set_mode(self, mode, first=False):
-        if mode not in dict(MODES):
+        if mode not in MODES:
             return
         self.mode = mode
         for p in list(self.body.panes()):
@@ -2376,7 +2201,7 @@ class App:
         self.render_now()
         self.highlight()
         self.save_cfg()
-        self.flash("Tamaño %d %%" % round(self.zoom * 100))
+        self.flash(t("status.zoom", pct=round(self.zoom * 100)))
 
     # -- archivo ----------------------------------------------------------------------------------
     def text(self):
@@ -2392,7 +2217,7 @@ class App:
         self.editor.insert("1.0", text)
         self.editor.edit_reset()
         self.editor.edit_modified(False)
-        self.saved_text = text if path else (text if text == WELCOME else "")
+        self.saved_text = text if path else (text if text == t("doc.welcome") else "")
         self.path = path
         self.render_now(keep_scroll=False)
         self.highlight()
@@ -2402,8 +2227,8 @@ class App:
         if not self.confirm_discard():
             return
         d = os.path.dirname(self.path) if self.path else self.cfg.get("last_dir") or os.path.expanduser("~")
-        p = filedialog.askopenfilename(parent=self.root, initialdir=d, title="Abrir",
-                                       filetypes=[("Markdown", "*.md *.markdown *.mdown *.mkd *.txt"), ("Todos", "*.*")])
+        p = filedialog.askopenfilename(parent=self.root, initialdir=d, title=t("dlg.open"),
+                                       filetypes=[(t("filetype.md"), "*.md *.markdown *.mdown *.mkd *.txt"), (t("filetype.all"), "*.*")])
         if p:
             self.open_path(p, confirm=False)
 
@@ -2414,7 +2239,7 @@ class App:
         try:
             text, enc, nl = read_text(p)
         except OSError as e:
-            messagebox.showerror(APP_NAME, "No se pudo abrir:\n%s\n\n%s" % (p, e), parent=self.root)
+            messagebox.showerror(APP_NAME, t("err.open", path=p, error=e), parent=self.root)
             return
         self.encoding, self.newline = ("utf-8" if enc == "utf-8-sig" else enc), nl
         self._bom = enc == "utf-8-sig"
@@ -2453,9 +2278,9 @@ class App:
 
     def save_as(self):
         d = os.path.dirname(self.path) if self.path else self.cfg.get("last_dir") or os.path.expanduser("~")
-        name = os.path.basename(self.path) if self.path else "sin título.md"
+        name = os.path.basename(self.path) if self.path else t("file.untitled_md")
         p = filedialog.asksaveasfilename(parent=self.root, initialdir=d, initialfile=name, defaultextension=".md",
-                                         filetypes=[("Markdown", "*.md"), ("Todos", "*.*")], title="Guardar como")
+                                         filetypes=[(t("filetype.md"), "*.md"), (t("filetype.all"), "*.*")], title=t("dlg.save_as"))
         if not p:
             return False
         if self._write(p):
@@ -2480,19 +2305,19 @@ class App:
                 os.remove(tmp)
             except OSError:
                 pass
-            messagebox.showerror(APP_NAME, "No se pudo guardar:\n%s\n\n%s" % (p, e), parent=self.root)
+            messagebox.showerror(APP_NAME, t("err.save", path=p, error=e), parent=self.root)
             return False
         self.saved_text = text
         self.mtime = self._mtime(p)
         self._update_title()
-        self.flash("Guardado")
+        self.flash(t("status.saved"))
         return True
 
     def confirm_discard(self):
         if not self.dirty():
             return True
-        name = os.path.basename(self.path) if self.path else "el documento nuevo"
-        r = messagebox.askyesnocancel(APP_NAME, "¿Guardar los cambios de %s?" % name, parent=self.root)
+        name = os.path.basename(self.path) if self.path else t("doc.new_name")
+        r = messagebox.askyesnocancel(APP_NAME, t("ask.save_changes", name=name), parent=self.root)
         if r is None:
             return False
         if r:
@@ -2530,11 +2355,11 @@ class App:
                     if self.dirty():
                         if not self._ext_changed:
                             self._ext_changed = True
-                            self.notice_lbl.configure(text="El archivo ha cambiado fuera de md-reader y aquí tienes cambios sin guardar.")
+                            self.notice_lbl.configure(text=t("notice.changed"))
                             self.notice.pack(fill="x", after=self.bar)
                     else:
                         self.reload()
-                        self.flash("Recargado: el archivo cambió fuera")
+                        self.flash(t("status.reloaded"))
         finally:
             self.root.after(1000, self._watch)
 
@@ -2545,12 +2370,12 @@ class App:
             self.mtime = self._mtime(self.path)
 
     def _update_title(self):
-        name = os.path.basename(self.path) if self.path else ("sin título" if self.text() != WELCOME else "Bienvenida")
+        name = os.path.basename(self.path) if self.path else (t("title.untitled") if self.text() != t("doc.welcome") else t("title.welcome"))
         mark = " •" if self.dirty() else ""
         self.root.title("%s%s — %s" % (name, mark, APP_NAME))
         self.lbl_title.configure(text=(self.path or name) + mark)
         words = len(re.findall(r"\w+", self.text()))
-        self.status.configure(text="%d palabras%s" % (words, "  ·  sin guardar" if self.dirty() else ""))
+        self.status.configure(text=t("status.words", n=words) + (t("status.unsaved") if self.dirty() else ""))
 
     def flash(self, msg):
         self.status.configure(text=msg)
@@ -2666,9 +2491,9 @@ class App:
 
     # -- dar formato (menu del boton derecho, atajos) --------------------------------------------
     LINE_PREFIX = re.compile(r"^(\s*)(?:#{1,6}\s+|>\s?|(?:[-*+]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?)?")
-    INLINE = [("Negrita", "**", "Ctrl+B"), ("Cursiva", "*", "Ctrl+I"), ("Tachado", "~~", ""), ("Código", "`", "")]
-    LINES = [("Título 1", "h1"), ("Título 2", "h2"), ("Título 3", "h3"), (None, None), ("Lista con puntos", "ul"),
-             ("Lista numerada", "ol"), ("Casilla de tarea", "task"), ("Cita", "quote"), (None, None), ("Texto normal", "plain")]
+    INLINE = [("fmt.bold", "**", "Ctrl+B"), ("fmt.italic", "*", "Ctrl+I"), ("fmt.strike", "~~", ""), ("fmt.code", "`", "")]
+    LINES = [("fmt.h1", "h1"), ("fmt.h2", "h2"), ("fmt.h3", "h3"), (None, None), ("fmt.ul", "ul"),
+             ("fmt.ol", "ol"), ("fmt.task", "task"), ("fmt.quote", "quote"), (None, None), ("fmt.plain", "plain")]
 
     def _ed_batch(self, fn):
         """Ejecuta un cambio en el editor como un solo paso de Ctrl+Z, y repinta."""
@@ -2723,7 +2548,7 @@ class App:
                 txt = ed.get(a, b)
                 ed.delete(a, b)
             except tk.TclError:
-                a, txt = ed.index("insert"), "texto"
+                a, txt = ed.index("insert"), t("fmt.link_text")
             url = txt if re.match(r"^https?://\S+$", txt) else "https://"
             ed.insert(a, "[%s](%s)" % (txt, url))
             ua = "%s+%dc" % (a, len(txt) + 3)
@@ -2811,30 +2636,30 @@ class App:
             self.editor.focus_set()
         st = "normal" if ok_inline else "disabled"
         for label, mark, key in self.INLINE:
-            m.add_command(label=label, accelerator=key, state=st, command=lambda k=mark: self.fmt_inline(k))
-        m.add_command(label="Enlace…", state=st, command=self.fmt_link)
+            m.add_command(label=t(label), accelerator=key, state=st, command=lambda k=mark: self.fmt_inline(k))
+        m.add_command(label=t("fmt.link"), state=st, command=self.fmt_link)
         m.add_separator()
         for label, kind in self.LINES:
             if label is None:
                 m.add_separator()
             else:
-                m.add_command(label=label, command=lambda k=kind: self.fmt_lines(k, l1, l2) if l1 is not None else self.fmt_lines(k))
-        m.add_command(label="Bloque de código", command=lambda: self.fmt_code_block(l1, l2) if l1 is not None else self.fmt_code_block())
+                m.add_command(label=t(label), command=lambda k=kind: self.fmt_lines(k, l1, l2) if l1 is not None else self.fmt_lines(k))
+        m.add_command(label=t("fmt.code_block"), command=lambda: self.fmt_code_block(l1, l2) if l1 is not None else self.fmt_code_block())
         m.add_separator()
         w = self.view if where == "view" else self.editor
         if where == "editor":
-            m.add_command(label="Cortar", accelerator="Ctrl+X", command=lambda: w.event_generate("<<Cut>>"))
-            m.add_command(label="Copiar (Markdown)", accelerator="Ctrl+C", command=lambda: w.event_generate("<<Copy>>"))
-            m.add_command(label="Copiar con formato (para Word…)", command=self.copy_rich_editor)
-            m.add_command(label="Pegar", accelerator="Ctrl+V", command=self.paste_rich)
-            m.add_command(label="Pegar sin formato", accelerator="Ctrl+Mayús+V", command=self.paste_plain)
+            m.add_command(label=t("ctx.cut"), accelerator="Ctrl+X", command=lambda: w.event_generate("<<Cut>>"))
+            m.add_command(label=t("ctx.copy_md"), accelerator="Ctrl+C", command=lambda: w.event_generate("<<Copy>>"))
+            m.add_command(label=t("ctx.copy_rich_word"), command=self.copy_rich_editor)
+            m.add_command(label=t("ctx.paste"), accelerator="Ctrl+V", command=self.paste_rich)
+            m.add_command(label=t("ctx.paste_plain"), accelerator=t("key.paste_plain"), command=self.paste_plain)
         else:
-            m.add_command(label="Copiar con formato", accelerator="Ctrl+C", command=self.copy_rich_view)
-            m.add_command(label="Copiar sin formato", command=self.copy_plain_view)
-            m.add_command(label="Pegar aquí", accelerator="Ctrl+V", command=lambda: self.paste_rich(from_view=True, at=(e.x, e.y)))
-            m.add_command(label="Pegar sin formato", accelerator="Ctrl+Mayús+V", command=lambda: self.paste_plain(from_view=True, at=(e.x, e.y)))
+            m.add_command(label=t("ctx.copy_rich"), accelerator="Ctrl+C", command=self.copy_rich_view)
+            m.add_command(label=t("ctx.copy_plain"), command=self.copy_plain_view)
+            m.add_command(label=t("ctx.paste_here"), accelerator="Ctrl+V", command=lambda: self.paste_rich(from_view=True, at=(e.x, e.y)))
+            m.add_command(label=t("ctx.paste_plain"), accelerator=t("key.paste_plain"), command=lambda: self.paste_plain(from_view=True, at=(e.x, e.y)))
         m.add_separator()
-        m.add_command(label="Guía de formatos", accelerator="F1", command=self.show_guide)
+        m.add_command(label=t("menu.guide"), accelerator="F1", command=self.show_guide)
         try:
             m.tk_popup(e.x_root, e.y_root)
         finally:
@@ -2887,7 +2712,7 @@ class App:
         if not md:
             return self.paste_plain(from_view, at)
         self._insert_pasted(md, from_view, at)
-        self.flash("Pegado como Markdown (sin formato: Ctrl+Mayús+V)")
+        self.flash(t("status.pasted_md", key=t("key.paste_plain")))
         return "break"
 
     def paste_plain(self, from_view=False, at=None):
@@ -2941,7 +2766,7 @@ class App:
             return "break"
         html, plain = html_from_view(v, a, b, self.renderer.links, images=self.renderer.image_paths)   # con las lineas bajo los titulos
         rich = set_rich_clipboard(self.root, html, plain)
-        self.flash("Copiado con formato" if rich else "Copiado (sin formato: este sistema no deja más)")
+        self.flash(t("status.copied_rich") if rich else t("status.copied_plain_only"))
         return "break"
 
     def copy_plain_view(self):
@@ -2951,7 +2776,7 @@ class App:
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(txt)
-        self.flash("Copiado sin formato")
+        self.flash(t("status.copied_plain"))
 
     def copy_rich_editor(self):
         """Editor: el Markdown seleccionado, convertido a texto con formato."""
@@ -2969,7 +2794,7 @@ class App:
         html = md_to_html(lenient, self.cfg.get("breaks", True))
         plain = re.sub(r"<[^>]+>", "", html.replace("<br />", "\n")).strip()
         rich = set_rich_clipboard(self.root, html, _html.unescape(plain))
-        self.flash("Copiado con formato" if rich else "Copiado (sin formato: este sistema no deja más)")
+        self.flash(t("status.copied_rich") if rich else t("status.copied_plain_only"))
 
     def show_guide(self):
         if getattr(self, "_guide", None) is not None:
@@ -3057,7 +2882,7 @@ class App:
         base = os.path.dirname(self.path) if self.path else os.getcwd()
         p = os.path.normpath(os.path.join(base, unquote(path)))
         if not os.path.exists(p):
-            self.flash("No existe: %s" % p)
+            self.flash(t("status.no_file", path=p))
             return
         if p.lower().endswith((".md", ".markdown", ".mdown", ".mkd", ".txt")):
             self.open_path(p)
@@ -3160,7 +2985,7 @@ class App:
     def find_step(self, d):
         hits = self._find_hits
         if not hits:
-            self.find_info.configure(text="sin resultados" if self.find_var.get() else "")
+            self.find_info.configure(text=t("find.none") if self.find_var.get() else "")
             return
         self._find_pos = (self._find_pos + d) % len(hits)
         w = self._find_target()
@@ -3168,7 +2993,7 @@ class App:
         a, b = hits[self._find_pos]
         w.tag_add("find_cur", a, b)
         w.see(a)
-        self.find_info.configure(text="%d de %d" % (self._find_pos + 1, len(hits)))
+        self.find_info.configure(text=t("find.pos", i=self._find_pos + 1, n=len(hits)))
 
     # -- varios -----------------------------------------------------------------------------------
     def associate_md(self):
@@ -3179,7 +3004,7 @@ class App:
             cmd = '"%s" "%s" "%%1"' % (exe, os.path.abspath(__file__))
             prog = "md-reader.md"
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\%s" % prog) as k:
-                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "Documento Markdown")
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, t("assoc.desc"))
             ico = os.path.join(HERE, "icon.ico")
             if os.path.exists(ico):
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\%s\DefaultIcon" % prog) as k:
@@ -3191,11 +3016,9 @@ class App:
                     winreg.SetValueEx(k, prog, 0, winreg.REG_NONE, b"")
             import ctypes
             ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, None, None)
-            messagebox.showinfo(APP_NAME, "Listo: md-reader aparece en «Abrir con» para los archivos .md.\n\n"
-                                "Para que se abran siempre con él: clic derecho en un .md ▸ Abrir con ▸ Elegir otra aplicación "
-                                "▸ md-reader ▸ «Usar siempre esta aplicación».", parent=self.root)
+            messagebox.showinfo(APP_NAME, t("assoc.done"), parent=self.root)
         except Exception as e:
-            messagebox.showerror(APP_NAME, "No se pudo: %s" % e, parent=self.root)
+            messagebox.showerror(APP_NAME, t("assoc.failed", error=e), parent=self.root)
 
     def about(self):
         if getattr(self, "_about", None) is not None:
@@ -3224,13 +3047,24 @@ class App:
         if self.updates:
             self.updates.show()
         else:
-            messagebox.showinfo(APP_NAME, "Esta copia no está instalada con su instalador, así que no se actualiza sola.\n\n"
-                                "Descárgalo de https://enderhugin.github.io/md-reader/", parent=self.root)
+            messagebox.showinfo(APP_NAME, t("upd.not_installed", url=SITE_URL), parent=self.root)
 
     def quit(self):
         if not self.confirm_discard():
             return
         self.save_cfg()
+        self.root.destroy()
+
+    def restart_for_language(self):
+        """Mas > Idioma: para ver el idioma nuevo, se cierra (preguntando si guardar) y se vuelve a abrir
+        con el mismo archivo."""
+        if not self.confirm_discard():
+            return
+        self.save_cfg()
+        exe = sys.executable
+        if sys.platform == "win32" and exe.lower().endswith("python.exe") and os.path.exists(exe[:-10] + "pythonw.exe"):
+            exe = exe[:-10] + "pythonw.exe"
+        subprocess.Popen([exe, os.path.abspath(__file__)] + ([self.path] if self.path else []), close_fds=True)
         self.root.destroy()
 
 

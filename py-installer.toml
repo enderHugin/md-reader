@@ -26,3 +26,15 @@ code = "import markdown_it, PIL, tkinter; tkinter.Tcl()"
 [[associate]]
 ext = [".md", ".markdown", ".mdown", ".mkd"]
 description = "Documento Markdown"
+
+# idiomas (lang-kit): el programa saca sus textos de lang/<idioma>.json; aqui, los del manifiesto
+[i18n]
+page_script = false       # la pagina (site/) ya enlaza ella misma el instalador del idioma elegido
+
+[i18n.en]
+"Lee y edita Markdown, en claro u oscuro" = "Read and edit Markdown, in light or dark"
+"Documento Markdown" = "Markdown document"
+
+[i18n.ca]
+"Lee y edita Markdown, en claro u oscuro" = "Llegeix i edita Markdown, en clar o fosc"
+"Documento Markdown" = "Document Markdown"
