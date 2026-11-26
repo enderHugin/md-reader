@@ -61,7 +61,10 @@
     "one": "{n} palabra",
     "other": "{n} palabras"
   },
-  "status.unsaved": "  ·  sin guardar",
+  "status.words_unsaved": {
+    "one": "{n} palabra  ·  sin guardar",
+    "other": "{n} palabras  ·  sin guardar"
+  },
   "status.no_file": "No existe: {path}",
   "fmt.bold": "Negrita",
   "fmt.italic": "Cursiva",

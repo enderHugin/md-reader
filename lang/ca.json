@@ -61,7 +61,10 @@
     "one": "{n} paraula",
     "other": "{n} paraules"
   },
-  "status.unsaved": "  ·  sense desar",
+  "status.words_unsaved": {
+    "one": "{n} paraula  ·  sense desar",
+    "other": "{n} paraules  ·  sense desar"
+  },
   "status.no_file": "No existeix: {path}",
   "fmt.bold": "Negreta",
   "fmt.italic": "Cursiva",

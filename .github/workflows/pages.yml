@@ -30,12 +30,12 @@ jobs:
           python3 -m pip install -q --break-system-packages markdown-it-py pillow
       - run: xvfb-run -a python3 tests/test_md_reader.py
       - name: Idiomas (diccionarios del programa y de la pagina completos, y cada clave usada existe)
-        uses: enderHugin/lang-kit@6889db7d995c25bc5c9a307e13c762ed11c1e635
+        uses: enderHugin/lang-kit@ba79c053b2303841f571c147f8fcc7c939a71462
         with:
           dirs: lang
           code: md_reader.py
           strict: 'true'
-      - uses: enderHugin/lang-kit@6889db7d995c25bc5c9a307e13c762ed11c1e635
+      - uses: enderHugin/lang-kit@ba79c053b2303841f571c147f8fcc7c939a71462
         with:
           dirs: site/lang
           code: site/index.html

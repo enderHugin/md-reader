@@ -61,7 +61,10 @@
     "one": "{n} word",
     "other": "{n} words"
   },
-  "status.unsaved": "  ·  not saved",
+  "status.words_unsaved": {
+    "one": "{n} word  ·  not saved",
+    "other": "{n} words  ·  not saved"
+  },
   "status.no_file": "Does not exist: {path}",
   "fmt.bold": "Bold",
   "fmt.italic": "Italic",

@@ -2375,7 +2375,7 @@ class App:
         self.root.title("%s%s — %s" % (name, mark, APP_NAME))
         self.lbl_title.configure(text=(self.path or name) + mark)
         words = len(re.findall(r"\w+", self.text()))
-        self.status.configure(text=t("status.words", n=words) + (t("status.unsaved") if self.dirty() else ""))
+        self.status.configure(text=t("status.words_unsaved", n=words) if self.dirty() else t("status.words", n=words))
 
     def flash(self, msg):
         self.status.configure(text=msg)
