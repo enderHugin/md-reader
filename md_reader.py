@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.2.3"
+APP_VERSION = "0.2.4"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -302,6 +302,10 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 
 - Reconoce a los hablantes escritos como `ANA: …`, `[Ana] …`, `<v Ana>` o en MAYÚSCULAS al principio.
 - Puede juntar en un párrafo lo que alguien dice seguido, y dejar margen a la izquierda.
+- Lo que no lleva nombre queda aparte y sin hablante (o, si lo eliges al importar, para quien hablaba antes).
+- Para arreglar a mano, **botón derecho sobre una intervención**:
+  - **Hablante de esta intervención**: elige otro, «sin hablante» o **Nuevo hablante…**.
+  - **Partir la intervención aquí**: separa desde la palabra donde haces clic, para dar esa parte a otra persona.
 
 **Más → Estilo de la transcripción** (o el botón derecho sobre una intervención) abre el diálogo de estilos:
 
@@ -1384,15 +1388,16 @@ def detect_speakers(cues):
     return cues
 
 
-def group_cues(cues, merge=True, gap=3.0, carry=True):
-    """Intervenciones: [{start, speaker, text}]. carry: lo que no lleva nombre es del hablante anterior.
-    merge: junta subtitulos seguidos del mismo hablante separados menos de 'gap' segundos."""
+def group_cues(cues, merge=True, gap=3.0, carry=False):
+    """Intervenciones: [{start, speaker, text}]. carry: lo que no lleva nombre es del hablante anterior (si no,
+    queda sin hablante y aparte, para asignarlo luego). merge: junta subtitulos seguidos del mismo hablante
+    separados menos de 'gap' segundos; lo que no tiene hablante nunca se junta."""
     out, last = [], None
     for c in cues:
         sp = c["speaker"] if c["speaker"] or not carry else (last or None)
         if not c["text"]:
             continue
-        if merge and out and out[-1]["speaker"] == sp and c["start"] - out[-1]["end"] <= gap:
+        if merge and sp and out and out[-1]["speaker"] == sp and c["start"] - out[-1]["end"] <= gap:
             out[-1]["text"] += " " + c["text"]
             out[-1]["end"] = max(out[-1]["end"], c["end"])
         else:
@@ -1794,13 +1799,51 @@ def save_theme(theme, path):
 
 
 def transcript_speaker_at(src, line_no):
-    """Numero de hablante de la intervencion en esa linea del Markdown (1...), o None."""
+    """Numero de hablante de la intervencion en esa linea del Markdown (1..., 0 = sin hablante), o None si esa
+    linea no es una intervencion."""
     lines = (src or "").split("\n")
     if 1 <= line_no <= len(lines):
         m = TRANSCRIPT_LINE_RX.match(lines[line_no - 1])
         if m:
-            return int(m.group(1)) or None
+            return int(m.group(1))
     return None
+
+
+def transcript_add_speaker(cfg, name):
+    """Hablante nuevo: lo por hablante le toma el valor comun (el color, uno de la paleta). Devuelve su numero."""
+    cfg["speakers"].append(name)
+    n = len(cfg["speakers"])
+    for e, props in cfg["style"].items():
+        for prop, p in props.items():
+            if p.get("each"):
+                p.setdefault("per", {})[str(n)] = SPEAKER_COLORS[(n - 1) % len(SPEAKER_COLORS)] \
+                    if prop == "color" else p.get("all")
+    return n
+
+
+def transcript_set_speaker(src, line_no, n, cfg):
+    """Cambia el hablante de la intervencion de esa linea (1...)."""
+    lines = src.split("\n")
+    m = TRANSCRIPT_LINE_RX.match(lines[line_no - 1])
+    if not m:
+        return src
+    lines[line_no - 1] = _intervention(cfg, n, parse_time_text(m.group(2)), m.group(5))
+    return transcript_apply("\n".join(lines), cfg)
+
+
+def transcript_split(src, line_no, pos, cfg):
+    """Parte en dos la intervencion de esa linea: desde 'pos' (dentro de su texto) va a otra intervencion, con el
+    mismo tiempo y, de momento, el mismo hablante."""
+    lines = src.split("\n")
+    m = TRANSCRIPT_LINE_RX.match(lines[line_no - 1])
+    if not m:
+        return src
+    n, t, text = int(m.group(1)), parse_time_text(m.group(2)), m.group(5)
+    a, b = text[:pos].rstrip(), text[pos:].lstrip()
+    if not a or not b:
+        return src
+    lines[line_no - 1:line_no] = [_intervention(cfg, n, t, a), "", _intervention(cfg, n, t, b)]
+    return "\n".join(lines)
 
 # ---------------------------------------------------------------------------------------------
 # Un poco de HTML dentro del Markdown (colores, subrayado, centrado...), sin ejecutar nada
@@ -2612,7 +2655,8 @@ class ImportSubtitlesDialog:
         ttk.Label(f, text=info, wraplength=460, justify="left").pack(anchor="w", pady=(4, 10))
         self.v_merge = tk.BooleanVar(value=True)
         self.v_gap = tk.StringVar(value="3")
-        self.v_carry = tk.BooleanVar(value=True)
+        self.v_carry = tk.BooleanVar(value=False)
+        unnamed = sum(1 for q in cues if not q["speaker"])
         self.v_margin = tk.StringVar(value="0")
         self.DEF = "(el de siempre)"
         self.v_theme = tk.StringVar(value=app.cfg.get("transcript_theme") if app.cfg.get("transcript_theme") in list_themes() else self.DEF)
@@ -2622,7 +2666,12 @@ class ImportSubtitlesDialog:
                         variable=self.v_merge).pack(side="left")
         ttk.Spinbox(row, from_=0, to=60, width=4, textvariable=self.v_gap).pack(side="left", padx=4)
         ttk.Label(row, text="s entre frases").pack(side="left")
-        ttk.Checkbutton(f, text="Lo que no lleva nombre es de quien hablaba antes", variable=self.v_carry).pack(anchor="w", pady=(4, 0))
+        if unnamed:
+            ttk.Label(f, text="%d subtítulos no llevan nombre de hablante. ¿Qué hago con ellos?" % unnamed).pack(anchor="w", pady=(8, 0))
+            ttk.Radiobutton(f, text="Dejarlos aparte, sin hablante (luego, botón derecho → «Hablante de esta intervención»)",
+                            variable=self.v_carry, value=False).pack(anchor="w", padx=(12, 0))
+            ttk.Radiobutton(f, text="Dárselos a quien hablaba antes (si el SRT solo pone el nombre al cambiar de persona)",
+                            variable=self.v_carry, value=True).pack(anchor="w", padx=(12, 0))
         row = ttk.Frame(f)
         row.pack(anchor="w", pady=(4, 0))
         ttk.Label(row, text="Margen a la izquierda de cada intervención:").pack(side="left")
@@ -3704,6 +3753,82 @@ class App:
             pass
         self._tdlg = TranscriptStyleDialog(self, tcfg, speaker)
 
+    def transcript_reassign(self, line, n):
+        """Cambiar el hablante de una intervencion (n=None: uno nuevo, preguntando el nombre)."""
+        from tkinter import simpledialog
+        src = self.text()
+        tcfg = transcript_cfg(src)
+        if tcfg is None:
+            return
+        if n is None:
+            name = simpledialog.askstring("Nuevo hablante", "Nombre del hablante:", parent=self.root)
+            if not name or not name.strip():
+                return
+            name = name.strip()
+            existing = [x.casefold() for x in tcfg["speakers"]]
+            n = existing.index(name.casefold()) + 1 if name.casefold() in existing else transcript_add_speaker(tcfg, name)
+        self._replace_src(transcript_set_speaker(src, line, n, tcfg))
+        self.flash("Intervención asignada a %s" % (tcfg["speakers"][n - 1] if n else "nadie (sin hablante)"))
+
+    def transcript_split_at(self, e, where, line):
+        """Partir una intervencion donde se hizo clic (lector) o donde esta el cursor (editor)."""
+        src = self.text()
+        tcfg = transcript_cfg(src)
+        lines = src.split("\n")
+        m = TRANSCRIPT_LINE_RX.match(lines[line - 1]) if tcfg and 0 < line <= len(lines) else None
+        if not m:
+            return
+        text, pos = m.group(5), None
+        if where == "editor":
+            col = int(self.editor.index("@%d,%d" % (e.x, e.y)).split(".")[1])
+            if m.start(5) < col < m.end(5):
+                pos = col - m.start(5)
+        else:
+            v = self.view
+            idx = v.index("@%d,%d" % (e.x, e.y))
+            rr = v.tag_prevrange("cls_x", idx + "+1c")
+            if rr and v.compare(rr[0], "<=", idx) and v.compare(idx, "<", rr[1]):
+                ws = v.index(idx + " wordstart")
+                while v.compare(ws, ">", rr[0]) and v.get(ws + "-1c") in "¿¡«\"'(“‘[—-":
+                    ws = v.index(ws + "-1c")                # los signos de apertura van con la palabra
+                before, whole = v.get(rr[0], ws), v.get(rr[0], rr[1])
+                words = v.get(ws, rr[1]).split()[:4]
+                if words and before.strip():
+                    rx = re.compile(r"[\W_]*".join(re.escape(w) for w in words))
+                    want = len(before) / max(1, len(whole)) * len(text)
+                    hits = [h.start() for h in rx.finditer(text)]
+                    if hits:
+                        pos = min(hits, key=lambda h: abs(h - want))
+        if not pos:
+            messagebox.showinfo(APP_NAME, "Haz clic con el botón derecho sobre la palabra donde empieza la parte que "
+                                "quieres separar (dentro del texto, no en el nombre ni en el tiempo).", parent=self.root)
+            return
+        self._replace_src(transcript_split(src, line, pos, tcfg))
+        self.flash("Intervención partida en dos: ahora puedes cambiar el hablante de la segunda")
+
+    def _replace_src(self, new):
+        old = self.text()
+        if new == old:
+            return
+        ed = self.editor
+        line = ed.index("insert")
+        top = self.view.yview()[0]
+        auto = str(ed.cget("autoseparators")) in ("1", "true", "True")
+        ed.configure(autoseparators=False)            # borrar + escribir = un solo Ctrl+Z
+        ed.edit_separator()
+        ed.delete("1.0", "end")
+        ed.insert("1.0", new)
+        ed.edit_separator()
+        ed.configure(autoseparators=auto)
+        try:
+            ed.mark_set("insert", line)
+        except tk.TclError:
+            pass
+        self.render_now()
+        self.view.yview_moveto(top)
+        self.highlight()
+        self._update_title()
+
     def transcript_set(self, tcfg):
         """Aplica estilos y colocacion de la transcripcion al documento (el texto de cada intervencion no cambia)."""
         old = self.text()
@@ -4104,17 +4229,31 @@ class App:
             m.add_command(label="Copiar sin formato", command=self.copy_plain_view)
             m.add_command(label="Pegar aquí", accelerator="Ctrl+V", command=lambda: self.paste_rich(from_view=True, at=(e.x, e.y)))
             m.add_command(label="Pegar sin formato", accelerator="Ctrl+Mayús+V", command=lambda: self.paste_plain(from_view=True, at=(e.x, e.y)))
-        if transcript_cfg(self.text()) is not None:
-            n = None
+        tcfg = transcript_cfg(self.text())
+        if tcfg is not None:
+            n, line = None, None
             try:
                 if where == "view":
-                    n = transcript_speaker_at(self.text(), self.renderer.line_at(self.view.index("@%d,%d" % (e.x, e.y))) + 1)
+                    line = self.renderer.line_at(self.view.index("@%d,%d" % (e.x, e.y))) + 1
                 else:
-                    n = transcript_speaker_at(self.text(), int(self.editor.index("@%d,%d" % (e.x, e.y)).split(".")[0]))
+                    line = int(self.editor.index("@%d,%d" % (e.x, e.y)).split(".")[0])
+                n = transcript_speaker_at(self.text(), line)
             except Exception:
                 pass
             m.add_separator()
-            m.add_command(label="Estilo de la transcripción…", command=lambda n=n: self.transcript_style(n))
+            if n is not None:
+                sub = tk.Menu(m, tearoff=0)
+                self._who = tk.IntVar(value=n)
+                for i, name in enumerate(tcfg["speakers"], 1):
+                    sub.add_radiobutton(label=name, variable=self._who, value=i,
+                                        command=lambda i=i, line=line: self.transcript_reassign(line, i))
+                sub.add_radiobutton(label="(sin hablante)", variable=self._who, value=0,
+                                    command=lambda line=line: self.transcript_reassign(line, 0))
+                sub.add_separator()
+                sub.add_command(label="Nuevo hablante…", command=lambda line=line: self.transcript_reassign(line, None))
+                m.add_cascade(label="Hablante de esta intervención", menu=sub)
+                m.add_command(label="Partir la intervención aquí", command=lambda ev=e, w=where, line=line: self.transcript_split_at(ev, w, line))
+            m.add_command(label="Estilo de la transcripción…", command=lambda n=n: self.transcript_style(n or None))
         m.add_separator()
         m.add_command(label="Guía de formatos", accelerator="F1", command=self.show_guide)
         try:

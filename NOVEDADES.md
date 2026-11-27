@@ -1,6 +1,10 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.2.4 — 2026-11-27
+- **Importar subtítulos ya no da a una persona lo que dijo otra.** Lo que no lleva nombre de hablante queda aparte y sin hablante, y nunca se junta con el párrafo de otro. Al importar se dice cuántos subtítulos no llevan nombre y se puede elegir dárselos a quien hablaba antes (para los SRT que solo ponen el nombre al cambiar de persona).
+- **Arreglar a mano con el botón derecho** sobre una intervención: *Hablante de esta intervención* (otro, sin hablante o uno nuevo) y *Partir la intervención aquí*, para separar desde una palabra y dar esa parte a otra persona. Todo se deshace con Ctrl+Z.
+
 ## 0.2.3 — 2026-11-27
 - **Exportar a HTML** (*Más → Exportar a HTML…*): una página web completa, con las imágenes dentro, y un **botón para cambiar entre modo claro y oscuro** (al principio sigue el del sistema y recuerda lo que elijas). Títulos con anclas, casillas, tablas, código y transcripciones con sus colores y columnas.
 

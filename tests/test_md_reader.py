@@ -6,6 +6,7 @@ import sys
 import tempfile
 import re
 import time
+import types
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
@@ -334,8 +335,11 @@ srt = ("1\n00:10:01,000 --> 00:10:02,500\nANA: Hola, ¿qué tal?\n\n2\n00:10:03,
 cues = md_reader.detect_speakers(md_reader.parse_subtitles(srt))
 ok([c["speaker"] for c in cues] == ["ANA", "Luis", None, "ANA"], "srt: hablantes con «NOMBRE:» y «[Nombre]»")
 groups = md_reader.group_cues(cues)
+ok([(g["speaker"], g["text"]) for g in groups] == [("ANA", "Hola, ¿qué tal?"), ("Luis", "Bien, *gracias*."), (None, "Y tú."), ("ANA", "Muy bien.")],
+   "srt: lo que no lleva nombre queda aparte, sin hablante (no se mete en el párrafo de otro)")
+groups = md_reader.group_cues(cues, carry=True)
 ok([(g["speaker"], g["text"]) for g in groups] == [("ANA", "Hola, ¿qué tal?"), ("Luis", "Bien, *gracias*. Y tú."), ("ANA", "Muy bien.")],
-   "srt: lo que no lleva nombre sigue a quien hablaba y se junta")
+   "srt: o, si se elige, se da a quien hablaba antes")
 vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Marta>Hola\n"
 ok(md_reader.detect_speakers(md_reader.parse_subtitles(vtt))[0]["speaker"] == "Marta", "vtt: <v Marta>")
 plain = "[00:10:01] HABLANTE texto\n[00:10:03] HABLANTE2 texto2\n[00:11:00] HABLANTE texto3\n"
@@ -431,6 +435,31 @@ td.close()
 app.editor.edit_undo()
 pump(root, 50)
 ok(app.text() == tmd, "Ctrl+Z deshace de una vez lo hecho mientras estaba abierto el diálogo")
+app.set_mode("editar")
+
+# arreglar a mano: hablante de una intervencion, hablante nuevo y partir
+_src = md_reader.build_transcript(md_reader.group_cues(cues), "Arreglos")[0]
+app.set_mode("ver")
+app.show_text(_src, None)
+pump(root, 50)
+_ln = next(i for i, l in enumerate(app.text().split("\n"), 1) if ">Y tú.<" in l)
+ok(md_reader.transcript_speaker_at(app.text(), _ln) == 0, "la intervención sin nombre tiene hablante 0")
+app.transcript_reassign(_ln, 2)
+ok(md_reader.transcript_speaker_at(app.text(), _ln) == 2 and "Luis:\tY tú." in app.view.get("1.0", "end"),
+   "botón derecho: cambiar el hablante de una intervención")
+_sd.askstring = lambda *a, **k: "Marta"
+app.transcript_reassign(_ln, None)
+ok(md_reader.transcript_cfg(app.text())["speakers"][-1] == "Marta" and "Marta:\tY tú." in app.view.get("1.0", "end"),
+   "botón derecho: hablante nuevo")
+_ln1 = next(i for i, l in enumerate(app.text().split("\n"), 1) if "Hola, ¿qué tal?" in l)
+_vi = app.view.search("qué", "1.0")
+_bb = app.view.bbox(_vi)
+app.transcript_split_at(types.SimpleNamespace(x=_bb[0] + 2, y=_bb[1] + 2), "view", _ln1)
+_vt = app.view.get("1.0", "end")
+ok("ANA:\tHola,\n" in _vt and "ANA:\t¿qué tal?" in _vt, "botón derecho: partir una intervención por donde se hace clic")
+app.editor.edit_undo()
+pump(root, 50)
+ok("Hola, ¿qué tal?" in app.text(), "y se deshace con Ctrl+Z")
 app.set_mode("editar")
 
 # exportar a HTML: pagina completa con boton claro/oscuro
