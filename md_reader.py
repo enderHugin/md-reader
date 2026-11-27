@@ -17,7 +17,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "md-reader"
-APP_VERSION = "0.2.2"
+APP_VERSION = "0.2.3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:
@@ -317,6 +317,14 @@ También vale un poco de HTML para lo que Markdown no tiene. Se ve el resultado,
 - Lo que es por hablante va por su nombre: si «JUEZA» era morada, en la próxima transcripción también. Los hablantes que no estén en el tema reciben, por orden, los estilos que sobren.
 - **Exportar…** e **Importar…** pasan un tema a un archivo `.mdtema` y al revés, por ejemplo para dárselo a otra persona.
 - **Usarlo al importar subtítulos** lo deja elegido por defecto en *Importar subtítulos*, donde también se puede elegir otro.
+
+## Exportar a HTML
+
+**Más → Exportar a HTML…** guarda el documento como una página web completa:
+
+- Se abre con cualquier navegador y lleva dentro las imágenes, así que funciona sola aunque la mandes.
+- Arriba a la derecha tiene un **botón para cambiar entre modo claro y oscuro**. Al principio sigue el modo del sistema, y recuerda lo que elijas.
+- Las transcripciones salen con sus colores y, si están en columnas, en columnas.
 
 ## Copiar y pegar con Word, Writer…
 
@@ -1560,6 +1568,146 @@ def transcript_apply(src, cfg):
         else:
             out.append(ln)
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------------------------
+# Exportar a HTML: una pagina completa, autonoma (imagenes dentro), con boton claro / oscuro
+# ---------------------------------------------------------------------------------------------
+EXPORT_CSS = """
+:root { color-scheme: light; --bg:#ffffff; --fg:#1d2330; --muted:#6b7385; --line:#d9dee7; --head:#111827;
+  --link:#1f6feb; --code-bg:#f2f4f8; --code-fg:#b3245b; --quote-bg:#f5f7fa; --quote-bar:#c5ccd8;
+  --th:#eef1f5; --alt:#fafbfc; --btn:#f2f4f8; }
+:root[data-theme="dark"] { color-scheme: dark; --bg:#16181d; --fg:#dde1e8; --muted:#8b93a3; --line:#2e333d;
+  --head:#f3f5f8; --link:#6ea8fe; --code-bg:#22262e; --code-fg:#f28bb0; --quote-bg:#1d2027; --quote-bar:#3a404c;
+  --th:#22262e; --alt:#1b1e24; --btn:#22262e; }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0 auto; max-width: 860px; padding: 48px 28px 80px; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif;
+  transition: background .2s, color .2s; }
+h1, h2, h3, h4, h5, h6 { color: var(--head); line-height: 1.25; margin: 1.6em 0 .6em; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--line); padding-bottom: .25em; margin-top: .4em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--line); padding-bottom: .2em; }
+a { color: var(--link); }
+p, ul, ol, blockquote, pre, table { margin: 0 0 1em; }
+code { font-family: ui-monospace, Consolas, "Cascadia Mono", Menlo, monospace; font-size: .92em;
+  background: var(--code-bg); color: var(--code-fg); padding: .1em .35em; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow: auto; }
+pre code { background: none; color: var(--fg); padding: 0; }
+blockquote { background: var(--quote-bg); border-left: 4px solid var(--quote-bar); margin-left: 0;
+  padding: .6em 1em; color: var(--fg); }
+blockquote > :last-child { margin-bottom: 0; }
+hr { border: none; border-top: 1px solid var(--line); margin: 1.6em 0; }
+table { border-collapse: collapse; }
+th, td { border: 1px solid var(--line); padding: 6px 12px; vertical-align: top; }
+th { background: var(--th); text-align: left; }
+tr:nth-child(even) td { background: var(--alt); }
+img { max-width: 100%; height: auto; }
+li.task { list-style: none; margin-left: -1.3em; }
+li.task input { margin-right: .5em; }
+table.transcript, table.transcript td { border: none; background: none; }
+table.transcript td { padding: 0 .7em .7em 0; }
+table.transcript td.c-t, table.transcript td.c-h { white-space: nowrap; }
+table.transcript.right td.c-h { text-align: right; }
+#theme { position: fixed; top: 14px; right: 14px; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--btn); color: var(--fg); font-size: 18px; cursor: pointer;
+  line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+#theme:hover { filter: brightness(.95); }
+@media print { #theme { display: none; } body { max-width: none; padding: 0; } }
+"""
+
+EXPORT_JS = """
+(function () {
+  var root = document.documentElement, btn = document.getElementById('theme');
+  function set(t) {
+    root.setAttribute('data-theme', t);
+    btn.textContent = t === 'dark' ? '\\u2600\\ufe0f' : '\\ud83c\\udf19';
+    btn.title = t === 'dark' ? 'Modo claro' : 'Modo oscuro';
+  }
+  var saved = null;
+  try { saved = localStorage.getItem('md-reader-theme'); } catch (e) {}
+  set(saved || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  btn.addEventListener('click', function () {
+    var t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    set(t);
+    try { localStorage.setItem('md-reader-theme', t); } catch (e) {}
+  });
+})();
+"""
+
+
+def _embed_images(h, base_dir):
+    """Las imagenes locales van dentro de la pagina (asi el .html funciona solo, se mande a quien se mande)."""
+    import base64
+    import mimetypes
+
+    def rep(m):
+        src = _html.unescape(m.group(2))
+        if re.match(r"^(?:[a-z]+:|//|#)", src, re.I):
+            return m.group(0)
+        path = src if os.path.isabs(src) else os.path.join(base_dir or "", src)
+        try:
+            data = open(path, "rb").read()
+        except OSError:
+            return m.group(0)
+        mime = mimetypes.guess_type(path)[0] or "image/png"
+        return '%s"data:%s;base64,%s"' % (m.group(1), mime, base64.b64encode(data).decode())
+    return re.sub(r'(<img\b[^>]*?\ssrc=)"([^"]*)"', rep, h)
+
+
+def export_html(src, title="Documento", base_dir=None, breaks=True):
+    """Markdown -> pagina HTML completa: estilos propios con modo claro y oscuro (boton arriba a la derecha,
+    recuerda la eleccion), anclas en los titulos, casillas, imagenes dentro y transcripciones en columnas."""
+    if MarkdownIt is None:
+        body = "<pre>%s</pre>" % _html.escape(src)
+    else:
+        md = MarkdownIt("commonmark", {"html": True, "breaks": breaks}).enable(["table", "strikethrough"])
+        tcfg = transcript_cfg(src)
+        src = TRANSCRIPT_CFG_RX.sub("", src)
+        # transcripcion en columnas: cada tanda de intervenciones seguidas, una tabla
+        tables = []
+        if tcfg and (tcfg.get("layout") or {}).get("columns"):
+            out, rows = [], []
+
+            def flush():
+                if rows:
+                    cls = "transcript right" if tcfg["layout"]["columns"] == "right" else "transcript"
+                    tables.append('<table class="%s">%s</table>' % (cls, "".join(rows)))
+                    out.append("<!--mdr-tr-%d-->" % (len(tables) - 1))
+                    rows.clear()
+            for ln in src.split("\n"):
+                m = TRANSCRIPT_LINE_RX.match(ln)
+                if m:
+                    n = m.group(1)
+                    rows.append('<tr class="i"><td class="c-t"><span class="t t%s">%s</span></td>'
+                                '<td class="c-h"><span class="h h%s">%s</span></td>'
+                                '<td class="c-x"><span class="x x%s">%s</span></td></tr>'
+                                % (n, m.group(2), n, m.group(4), n, md.renderInline(m.group(5))))
+                elif ln.strip() or not rows:
+                    flush()
+                    out.append(ln)
+            flush()
+            src = "\n".join(out)
+        if breaks:
+            src = Renderer._lenient(Renderer, src)[0]
+        body = md.render(src)
+        body = re.sub(r"<!--mdr-tr-(\d+)-->", lambda m: tables[int(m.group(1))], body)
+        body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+        # anclas de los titulos (como GitHub), para que funcionen los enlaces #...
+        used = set()
+        body = re.sub(r"<h([1-6])>(.*?)</h\1>",
+                      lambda m: '<h%s id="%s">%s</h%s>' % (m.group(1), slugify(re.sub(r"<[^>]+>", "", _html.unescape(m.group(2))), used),
+                                                           m.group(2), m.group(1)), body, flags=re.S)
+        body = re.sub(r"<li>\[( |x|X)\] ", lambda m: '<li class="task"><input type="checkbox" disabled%s>' %
+                      (" checked" if m.group(1) != " " else ""), body)
+        body = _embed_images(body, base_dir)
+    return ('<!DOCTYPE html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            '<meta name="generator" content="md-reader %s">\n<title>%s</title>\n<style>%s</style>\n'
+            '<script>try{var t=localStorage.getItem("md-reader-theme");if(t)document.documentElement.setAttribute("data-theme",t);'
+            'else if(matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>\n'
+            '</head>\n<body>\n<button id="theme" type="button" aria-label="Cambiar entre modo claro y oscuro"></button>\n'
+            '%s\n<script>%s</script>\n</body>\n</html>\n' % (APP_VERSION, _html.escape(title), EXPORT_CSS, body, EXPORT_JS))
 
 
 THEME_EXT = ".mdtema"
@@ -3213,6 +3361,7 @@ class App:
         m.add_checkbutton(label="Respetar los saltos de línea", variable=self.breaks_var, command=self.toggle_breaks)
         m.add_command(label="Guía de formatos              F1", command=self.show_guide)
         m.add_command(label="Copiar todo con formato (para Word…)", command=self.copy_rich_all)
+        m.add_command(label="Exportar a HTML…", command=self.export_html)
         m.add_separator()
         m.add_command(label="Importar subtítulos (.srt, .vtt)…", command=self.import_subtitles)
         m.add_command(label="Estilo de la transcripción…", command=self.transcript_style)
@@ -3475,6 +3624,28 @@ class App:
         if not self.path:
             return self.save_as()
         return self._write(self.path)
+
+    def export_html(self):
+        base = os.path.splitext(os.path.basename(self.path))[0] if self.path else \
+            os.path.splitext(getattr(self, "suggest_name", None) or "sin título.md")[0]
+        d = os.path.dirname(self.path) if self.path else (self.cfg.get("last_dir") or os.path.expanduser("~"))
+        p = filedialog.asksaveasfilename(parent=self.root, title="Exportar a HTML", initialdir=d,
+                                         initialfile=base + ".html", defaultextension=".html",
+                                         filetypes=[("Página web", "*.html *.htm"), ("Todos", "*.*")])
+        if not p:
+            return
+        src = self.text()
+        m = re.search(r"^#\s+(.+)$", src, re.M)
+        title = re.sub(r"[*_`]", "", m.group(1)).strip() if m else base
+        try:
+            page = export_html(src, title, os.path.dirname(self.path) if self.path else None,
+                               breaks=self.cfg.get("breaks", True))
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(page)
+        except Exception as e:
+            messagebox.showerror(APP_NAME, "No se pudo exportar:\n%s" % e, parent=self.root)
+            return
+        self.flash("Exportado: %s (con botón de modo claro / oscuro)" % os.path.basename(p))
 
     # ---- transcripciones -------------------------------------------------------------------------
     def import_subtitles(self):

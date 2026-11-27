@@ -433,6 +433,16 @@ pump(root, 50)
 ok(app.text() == tmd, "Ctrl+Z deshace de una vez lo hecho mientras estaba abierto el diálogo")
 app.set_mode("editar")
 
+# exportar a HTML: pagina completa con boton claro/oscuro
+_eh = md_reader.export_html("# Título\n\n- [x] hecho\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n" + tmd, "Título")
+ok(_eh.startswith("<!DOCTYPE html>") and 'id="theme"' in _eh and 'data-theme="dark"' in _eh and "localStorage" in _eh,
+   "exportar a HTML: página completa con botón de modo claro / oscuro")
+ok('<h1 id="título">' in _eh and 'type="checkbox" disabled checked' in _eh and "<table>" in _eh, "exportar: anclas, casillas y tablas")
+ok('class="transcript' in _eh and md_reader.TRANSCRIPT_MARK not in _eh, "exportar: la transcripción en columnas, sin su configuración")
+_fd.asksaveasfilename = lambda *a, **k: os.path.join(_tdir, "export.html")
+app.export_html()
+ok(os.path.exists(os.path.join(_tdir, "export.html")), "Más → Exportar a HTML… guarda el archivo")
+
 # guia
 app.show_guide()
 pump(root, 200)

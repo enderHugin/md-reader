@@ -7,6 +7,7 @@
 
 ![md-reader en modo oscuro](docs/oscuro.png)
 
+- **Exportar a HTML**: una página web con botón de modo claro / oscuro.
 - **Transcripciones**: importa subtítulos (`.srt`, `.vtt`) y da a cada hablante su color y su estilo (*Más → Importar subtítulos*).
 - **Pegar desde Word, Writer o una web** (`Ctrl+V`): lo copiado entra como Markdown.
 - Un poco de **HTML** (colores, tachado, subrayado, centrado…) se ve con su formato; los comentarios no se muestran.

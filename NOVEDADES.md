@@ -1,6 +1,9 @@
 <!-- NOVEDADES.md -->
 # Novedades de md-reader
 
+## 0.2.3 — 2026-11-27
+- **Exportar a HTML** (*Más → Exportar a HTML…*): una página web completa, con las imágenes dentro, y un **botón para cambiar entre modo claro y oscuro** (al principio sigue el del sistema y recuerda lo que elijas). Títulos con anclas, casillas, tablas, código y transcripciones con sus colores y columnas.
+
 ## 0.2.2 — 2026-11-26
 - **Temas de transcripción**: guarda la colocación y los estilos de una transcripción como tema y úsalo en otras, o elígelo al importar subtítulos (y déjalo por defecto). Lo que es por hablante va por su nombre: si «JUEZA» era morada, en la próxima también.
 - **Exportar e importar temas** como archivos `.mdtema`, para guardarlos o pasárselos a otra persona.
